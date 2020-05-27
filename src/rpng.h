@@ -167,23 +167,23 @@ extern "C" {            // Prevents name mangling of functions
 //----------------------------------------------------------------------------------
 
 // Functions operating on file (use memory versions internally)
-    RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
-    RPNGAPI rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);    // Read one chunk type
-    RPNGAPI rpng_chunk *rpng_chunk_read_all(const char *filename, int *count);           // Read all chunks
-    RPNGAPI void rpng_chunk_remove(const char *filename, const char *chunk_type);        // Remove one chunk type
-    RPNGAPI void rpng_chunk_remove_ancillary(const char *filename);                      // Remove all chunks except: IHDR-IDAT-IEND
-    RPNGAPI void rpng_chunk_write(const char *filename, rpng_chunk data);                // Write one new chunk after IHDR (any kind)
-    RPNGAPI void rpng_chunk_write_text(const char *filename, char *keyword, char *text); // Write tEXt chunk
-    RPNGAPI void rpng_chunk_print_info(const char *filename);                            // Output info about the chunks
+RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
+RPNGAPI rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);    // Read one chunk type
+RPNGAPI rpng_chunk *rpng_chunk_read_all(const char *filename, int *count);           // Read all chunks
+RPNGAPI void rpng_chunk_remove(const char *filename, const char *chunk_type);        // Remove one chunk type
+RPNGAPI void rpng_chunk_remove_ancillary(const char *filename);                      // Remove all chunks except: IHDR-IDAT-IEND
+RPNGAPI void rpng_chunk_write(const char *filename, rpng_chunk data);                // Write one new chunk after IHDR (any kind)
+RPNGAPI void rpng_chunk_write_text(const char *filename, char *keyword, char *text); // Write tEXt chunk
+RPNGAPI void rpng_chunk_print_info(const char *filename);                            // Output info about the chunks
 
-    // Functions operating on memory buffer
-    RPNGAPI int rpng_chunk_count_from_memory(const char *buffer);                                             // Count the chunks in a PNG image on memory
-    RPNGAPI rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type);               // Read one chunk type on memory
-    RPNGAPI rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count);                      // Read all chunks on memory
-    RPNGAPI char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, int *output_size);      // Remove one chunk type on memory
-    RPNGAPI char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_size);                    // Remove all chunks except: IHDR-IDAT-IEND
-    RPNGAPI char *rpng_chunk_write_to_memory(const char *buffer, rpng_chunk chunk, int *output_size);               // Write one new chunk after IHDR (any kind)
-    RPNGAPI char *rpng_chunk_write_text_to_memory(const char *buffer, char *keyword, char *text, int *output_size); // Write one new tEXt chunk
+// Functions operating on memory buffer
+RPNGAPI int rpng_chunk_count_from_memory(const char *buffer);                                             // Count the chunks in a PNG image on memory
+RPNGAPI rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type);               // Read one chunk type on memory
+RPNGAPI rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count);                      // Read all chunks on memory
+RPNGAPI char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, int *output_size);      // Remove one chunk type on memory
+RPNGAPI char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_size);                    // Remove all chunks except: IHDR-IDAT-IEND
+RPNGAPI char *rpng_chunk_write_to_memory(const char *buffer, rpng_chunk chunk, int *output_size);               // Write one new chunk after IHDR (any kind)
+RPNGAPI char *rpng_chunk_write_text_to_memory(const char *buffer, char *keyword, char *text, int *output_size); // Write one new tEXt chunk
 
 #ifdef __cplusplus
 }
