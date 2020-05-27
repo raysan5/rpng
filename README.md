@@ -8,9 +8,9 @@
  - Chunks data abstraction (`png_chunk` type)
  - Chunk types provided for convenience
  - Operates on file or file-buffer
- - Minimal libc usage and `RPNG_NO_STDIO` support
+ - Minimal `libc` usage and `RPNG_NO_STDIO` supported
  
-## rpng API
+## rpng basic file API
 ```c
 int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
 rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);    // Read one chunk type
