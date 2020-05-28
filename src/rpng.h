@@ -136,18 +136,14 @@
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
 #ifndef __cplusplus
-// Boolean type
-#if !defined(_STDBOOL_H)
-typedef enum { false, true } bool;
-#define _STDBOOL_H
-#endif
+#include <stdbool.h>        // Boolean type
 #endif
 
 // After signature we have a series of chunks, every chunck has the same structure:
 typedef struct {
     unsigned int length;    // Data length, must be converted to big endian when saving!
-    char type[4];           // Chunk type FOURCC: IDHR, PLTE, IDAT, IEND / gAMA, sRGB, tEXt, tIME...
-    void *data;             // Chunk data pointer
+    unsigned char type[4];  // Chunk type FOURCC: IDHR, PLTE, IDAT, IEND / gAMA, sRGB, tEXt, tIME...
+    unsigned char *data;    // Chunk data pointer
     unsigned int crc;       // 32bit CRC (computed over type and data)
 } rpng_chunk;
 
@@ -362,8 +358,8 @@ const char png_signature[8] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }
 //----------------------------------------------------------------------------------
 // Module specific Functions Declaration
 //----------------------------------------------------------------------------------
-static unsigned int swap_endian(unsigned int value);        // Swap integer from big<->little endian
-static unsigned int compute_crc32(char *buffer, int size);  // Compute CRC32
+static unsigned int swap_endian(unsigned int value);                // Swap integer from big<->little endian
+static unsigned int compute_crc32(unsigned char *buffer, int size); // Compute CRC32
 
 // Load data from file into a buffer
 static char *load_file_to_buffer(const char *filename, int *bytes_read);
@@ -736,21 +732,25 @@ char *rpng_chunk_write_to_memory(const char *buffer, rpng_chunk chunk, int *outp
 
         while (memcmp(file_data_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
         {
-            //int crc = compute_crc32(file_data_ptr + 4, chunk_len + 4);
-            //printf("Chunk CRC: 0x%x\n", crc);     // It should be saved this same way
-
             memcpy(output_buffer + out_size, file_data_ptr, 4 + 4 + chunk_len + 4);  // Length + FOURCC + chunk_len + CRC32
             out_size += (4 + 4 + chunk_len + 4);
 
-            // Just copy input data after IHDR chunk in the output buffer
+            // Check if we just copied the IHDR chunk to append our chunk after it
             if (memcmp(file_data_ptr + 4, "IHDR", 4) == 0)
             {
                 int lengthBE = swap_endian(chunk.length);
                 memcpy(output_buffer + out_size, &lengthBE, sizeof(int));           // Write chunk length
                 memcpy(output_buffer + out_size + 4, chunk.type, 4);                // Write chunk type
                 memcpy(output_buffer + out_size + 4 + 4, chunk.data, chunk.length); // Write chunk data
-                int crc = compute_crc32(chunk.type, 4 + chunk_len);
+
+                unsigned char *type_data = RPNG_MALLOC(4 + chunk.length);
+                memcpy(type_data, chunk.type, 4);
+                memcpy(type_data + 4, chunk.data, chunk.length);
+                unsigned int crc = compute_crc32(type_data, 4 + chunk.length);
+                crc = swap_endian(crc);
                 memcpy(output_buffer + out_size + 4 + 4 + chunk.length, &crc, 4);   // Write CRC32 (computed over type + data)
+                
+                RPNG_FREE(type_data);
 
                 out_size += (4 + 4 + chunk.length + 4);  // Update output file file_size with new chunk
             }
@@ -785,8 +785,7 @@ char *rpng_chunk_write_text_to_memory(const char *buffer, char *keyword, char *t
     chunk.data = RPNG_CALLOC(chunk.length, 1);
     memcpy(((unsigned char*)chunk.data), keyword, keyword_len);
     memcpy(((unsigned char*)chunk.data) + keyword_len + 1, text, text_len);
-    int crc = compute_crc32(chunk.type, chunk.length + 4);
-    memcpy(&chunk.crc, &crc, 4);
+    chunk.crc = 0;  // Computed by rpng_chunk_write_to_memory()
 
     int out_size = 0;
     char *output_buffer = rpng_chunk_write_to_memory(buffer, chunk, &out_size);
@@ -817,7 +816,7 @@ static unsigned int swap_endian(unsigned int value)
 }
 
 // Compute CRC32
-static unsigned int compute_crc32(char *buffer, int size)
+static unsigned int compute_crc32(unsigned char *buffer, int size)
 {
     static unsigned int crc_table[256] = {
         0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3,
