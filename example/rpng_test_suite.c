@@ -10,7 +10,7 @@
 ********************************************************************************************/
 
 #define RPNG_IMPLEMENTATION
-#include "rpng.h"
+#include "../src/rpng.h"
 
 #include <stdio.h>      // Required for: printf()
 
@@ -46,10 +46,10 @@ int main(int argc, char *argv[])
         // TEST: Write a chunk - rPNG
         rpng_chunk chunk = { 0 };
         chunk.length = 20;              // Data length
-        strcpy(chunk.type, "rPNG");     // Chunck type FOURCC
+        memcpy(chunk.type, "rPNG", 4);  // Chunck type FOURCC
         chunk.data = RPNG_MALLOC(20);   // Chunck data pointer
         memcpy(chunk.data, "This is a test data.", 20);
-        chunk.crc = compute_crc32("rPNGThis is a test data.", 24);          // 32bit CRC (computed over type and data)
+        chunk.crc = 0;  // CRC automatically computed over type and data on writing
 
         rpng_chunk_write(argv[1], chunk);
 
