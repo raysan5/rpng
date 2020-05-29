@@ -171,6 +171,9 @@ RPNGAPI void rpng_chunk_remove_ancillary(const char *filename);                 
 RPNGAPI void rpng_chunk_write(const char *filename, rpng_chunk data);                // Write one new chunk after IHDR (any kind)
 RPNGAPI void rpng_chunk_write_text(const char *filename, char *keyword, char *text); // Write tEXt chunk
 RPNGAPI void rpng_chunk_print_info(const char *filename);                            // Output info about the chunks
+RPNGAPI bool rpng_chunk_check_all_valid(const char *filename);                       // Check chunks CRC is valid
+RPNGAPI void rpng_chunk_combine_idata(const char *filename);                         // Combine multiple IDAT chunks into a single one
+RPNGAPI void rpng_chunk_split_idata(const char *filename, int split_size);           // Split one IDAT chunk into multiple ones
 
 // Functions operating on memory buffer
 RPNGAPI int rpng_chunk_count_from_memory(const char *buffer);                                             // Count the chunks in a PNG image on memory
@@ -180,6 +183,8 @@ RPNGAPI char *rpng_chunk_remove_from_memory(const char *buffer, const char *chun
 RPNGAPI char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_size);                    // Remove all chunks except: IHDR-IDAT-IEND
 RPNGAPI char *rpng_chunk_write_to_memory(const char *buffer, rpng_chunk chunk, int *output_size);               // Write one new chunk after IHDR (any kind)
 RPNGAPI char *rpng_chunk_write_text_to_memory(const char *buffer, char *keyword, char *text, int *output_size); // Write one new tEXt chunk
+RPNGAPI char *rpng_chunk_combine_idata_from_memory(char *buffer, int *output_size);                       // Combine multiple IDAT chunks into a single one
+RPNGAPI char *rpng_chunk_split_idata_from_memory(char *buffer, int split_size, int *output_size);         // Split one IDAT chunk into multiple ones
 
 #ifdef __cplusplus
 }
@@ -502,6 +507,71 @@ void rpng_chunk_print_info(const char *filename)
     RPNG_FREE(chunks);
 }
 
+// Check chunks CRC and order
+bool rpng_chunk_check_all_valid(const char *filename)
+{
+    bool result = true;
+    
+    int count = 0;
+    rpng_chunk *chunks = rpng_chunk_read_all(filename, &count);
+    
+    unsigned int crc = 0;
+    char *crc_data = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
+    
+    for (int i = 0; i < count; i++)
+    {
+        memcpy(crc_data, chunks[i].type, 4);
+        memcpy(crc_data + 4, chunks[i].data, chunks[i].length);
+        crc = compute_crc32((unsigned char *)crc_data, 4 + chunks[i].length);
+        crc = swap_endian(crc);
+        
+        // Check computed CRC matches provided CRC
+        if (chunks[i].crc != crc) 
+        {
+            result = false;
+            break;
+        }
+    }
+
+    // Free chunks memory
+    for (int i = 0; i < count; i++) RPNG_FREE(chunks[i].data);
+    RPNG_FREE(chunks);
+    
+    return result;
+}
+
+// Combine multiple IDAT chunks into a single one
+void rpng_chunk_combine_idata(const char *filename)
+{
+    int file_size = 0;
+    char *file_data = load_file_to_buffer(filename, &file_size);
+
+    int file_output_size = 0;
+    char *file_output = rpng_chunk_combine_idata_from_memory(file_data, &file_output_size);
+
+    // TODO: Review this security check, it's horrible...
+    if (file_output_size < (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+
+    RPNG_FREE(file_output);
+    RPNG_FREE(file_data);
+}
+
+// Split one IDAT chunk into multiple ones
+void rpng_chunk_split_idata(const char *filename, int split_size)
+{
+    int file_size = 0;
+    char *file_data = load_file_to_buffer(filename, &file_size);
+
+    int file_output_size = 0;
+    char *file_output = rpng_chunk_split_idata_from_memory(file_data, split_size, &file_output_size);
+
+    // TODO: Review this security check, it's horrible...
+    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+
+    RPNG_FREE(file_output);
+    RPNG_FREE(file_data);
+}
+
 // Functions operating on memory buffers data
 //----------------------------------------------------------------------------------------------------------
 
@@ -792,10 +862,154 @@ char *rpng_chunk_write_text_to_memory(const char *buffer, char *keyword, char *t
     memcpy(((unsigned char*)chunk.data) + keyword_len + 1, text, text_len);
     chunk.crc = 0;  // Computed by rpng_chunk_write_to_memory()
 
-    int out_size = 0;
-    char *output_buffer = rpng_chunk_write_to_memory(buffer, chunk, &out_size);
+    int output_buffer_size = 0;
+    char *output_buffer = rpng_chunk_write_to_memory(buffer, chunk, &output_buffer_size);
 
-    *output_size = out_size;
+    *output_size = output_buffer_size;
+    return output_buffer;
+}
+
+// Combine multiple IDAT chunks into a single one
+char *rpng_chunk_combine_idata_from_memory(char *buffer, int *output_size)
+{
+    char *buffer_ptr = (char *)buffer;
+    char *output_buffer = NULL;
+    int output_buffer_size = 0;
+
+    if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
+    {
+        char *idata_buffer = (char *)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);    // Output buffer allocation
+        memcpy(idata_buffer, "IDAT", 4);
+        int idata_buffer_size = 0;
+        output_buffer = (char *)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);  // Output buffer allocation
+        
+        memcpy(output_buffer, png_signature, 8);               // Copy PNG signature
+        output_buffer_size += 8;
+        buffer_ptr += 8;       // Move pointer after signature
+
+        unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
+
+        while (memcmp(buffer_ptr + 4, "IEND", 4) != 0)         // While IEND chunk not reached
+        {
+            // If IDAT chunk just copy data into idata_buffer
+            if ((memcmp(buffer_ptr + 4, "IDAT", 4) == 0))
+            {
+                memcpy(idata_buffer + 4 + idata_buffer_size, buffer_ptr + 8, chunk_size);
+                idata_buffer_size += chunk_size;
+            }
+            else
+            {
+                memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + chunk_size + 4);  // Length + FOURCC + chunk_size + CRC32
+                output_buffer_size += (4 + 4 + chunk_size + 4);
+            }
+
+            buffer_ptr += (4 + 4 + chunk_size + 4);   // Move pointer to next chunk
+            chunk_size = swap_endian(((int *)buffer_ptr)[0]);
+        }
+        
+        // Write IDAT combined chunk
+        unsigned int idata_buffer_size_be = swap_endian(idata_buffer_size);
+        memcpy(output_buffer + output_buffer_size, &idata_buffer_size_be, 4);
+        memcpy(output_buffer + output_buffer_size + 4, idata_buffer, 4 + idata_buffer_size);
+        unsigned int crc = compute_crc32((unsigned char *)idata_buffer, 4 + idata_buffer_size);
+        crc = swap_endian(crc);
+        memcpy(output_buffer + output_buffer_size + 4 + 4 + idata_buffer_size, &crc, 4);
+        RPNG_FREE(idata_buffer);
+        
+        output_buffer_size += (idata_buffer_size + 12);
+
+        // Write IEND chunk
+        memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + 4);
+        output_buffer_size += 12;
+        
+        // Resize output buffer
+        char *output_buffer_sized = (char *)RPNG_REALLOC(output_buffer, output_buffer_size);
+        if (output_buffer_sized != NULL) output_buffer = output_buffer_sized;
+    }
+
+    *output_size = output_buffer_size;
+    return output_buffer;
+}
+
+// Split one IDAT chunk into multiple ones
+char *rpng_chunk_split_idata_from_memory(char *buffer, int split_size, int *output_size)
+{
+    char *buffer_ptr = (char *)buffer;
+    char *output_buffer = NULL;
+    int output_buffer_size = 0;
+    
+    if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
+    {
+        char *idata_split_buffer = (char *)RPNG_CALLOC(split_size + 12, 1);    // Output buffer allocation
+        
+        output_buffer = (char *)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);  // Output buffer allocation
+        
+        memcpy(output_buffer, png_signature, 8);    // Copy PNG signature
+        output_buffer_size += 8;
+        buffer_ptr += 8;       // Move pointer after signature
+
+        unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
+
+        while (memcmp(buffer_ptr + 4, "IEND", 4) != 0)         // While IEND chunk not reached
+        {
+            // If IDAT chunk, split into multiple sized chunks
+            if ((memcmp(buffer_ptr + 4, "IDAT", 4) == 0) && (chunk_size > (unsigned int)split_size))
+            {
+                // Split chunk into pieces!
+                unsigned int chunk_remain_size = chunk_size;
+                char *buffer_ptr_offset = buffer_ptr + 4 + 4;
+                
+                while (chunk_remain_size > (unsigned int)split_size)
+                {
+                    unsigned int split_size_be = swap_endian(split_size);
+                    memcpy(idata_split_buffer, &split_size_be, 4);
+                    memcpy(idata_split_buffer + 4, "IDAT", 4);
+                    memcpy(idata_split_buffer + 4 + 4, buffer_ptr_offset, split_size);
+                    unsigned int crc = compute_crc32((unsigned char *)(idata_split_buffer + 4), 4 + split_size);
+                    crc = swap_endian(crc);
+                    memcpy(idata_split_buffer + 4 + 4 + split_size, &crc, 4);
+                    
+                    chunk_remain_size -= split_size;
+                    buffer_ptr_offset += split_size;
+                    
+                    memcpy(output_buffer + output_buffer_size, idata_split_buffer, split_size + 12);
+                    output_buffer_size += (split_size + 12);
+                }
+                
+                // Save last IDAT chunk piece
+                unsigned int chunk_remain_size_be = swap_endian(chunk_remain_size);
+                memcpy(idata_split_buffer, &chunk_remain_size_be, 4);
+                memcpy(idata_split_buffer + 4, "IDAT", 4);
+                memcpy(idata_split_buffer + 4 + 4, buffer_ptr_offset, chunk_remain_size);
+                unsigned int crc = compute_crc32((unsigned char *)(idata_split_buffer + 4), 4 + chunk_remain_size);
+                crc = swap_endian(crc);
+                memcpy(idata_split_buffer + 4 + 4 + chunk_remain_size, &crc, 4);
+                
+                memcpy(output_buffer + output_buffer_size, idata_split_buffer, chunk_remain_size + 12);
+                output_buffer_size += (chunk_remain_size + 12);
+            }
+            else
+            {
+                memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + chunk_size + 4);  // Length + FOURCC + chunk_size + CRC32
+                output_buffer_size += (4 + 4 + chunk_size + 4);
+            }
+
+            buffer_ptr += (4 + 4 + chunk_size + 4);   // Move pointer to next chunk
+            chunk_size = swap_endian(((int *)buffer_ptr)[0]);
+        }
+        
+        RPNG_FREE(idata_split_buffer);
+
+        // Write IEND chunk
+        memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + 4);
+        output_buffer_size += 12;
+        
+        // Resize output buffer
+        char *output_buffer_sized = (char *)RPNG_REALLOC(output_buffer, output_buffer_size);
+        if (output_buffer_sized != NULL) output_buffer = output_buffer_sized;
+    }
+    
+    *output_size = output_buffer_size;
     return output_buffer;
 }
 

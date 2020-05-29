@@ -81,6 +81,16 @@ int main(int argc, char *argv[])
         
         // TEST: Remove all ancillary chunks
         //rpng_chunk_remove_ancillary(argv[1]);
+        
+        // TEST: Split IDAT chunks
+        rpng_chunk_print_info(argv[1]);
+        rpng_chunk_split_idata(argv[1], 16384);
+        rpng_chunk_print_info(argv[1]);
+        
+        // TEST: Combine IDAT chunks
+        rpng_chunk_print_info(argv[1]);
+        rpng_chunk_combine_idata(argv[1]);
+        rpng_chunk_print_info(argv[1]);
     }
     else printf("WARNING: No input file provided.\n");
 
