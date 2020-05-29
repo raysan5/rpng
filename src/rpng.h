@@ -254,9 +254,9 @@ typedef struct {
 // For color type 0 (grayscale), the tRNS chunk contains a single gray level value, stored in the format: Gray (2 bytes), range 0 .. (2^bitdepth)-1
 // For color type 2 (truecolor), the tRNS chunk contains a single RGB color value, stored in the format: Red-Green-Blue (2 bytes each), range 0 .. (2^bitdepth)-1
 // tRNS is prohibited for color types 4 and 6, since a full alpha channel is already present in those cases.
-//When present, the tRNS chunk must precede the first IDAT chunk, and must follow the PLTE chunk, if any.
+// When present, the tRNS chunk must precede the first IDAT chunk, and must follow the PLTE chunk, if any.
 typedef struct {
-    unsigned char *data;        // Gamma times 100000 (i.e. Gamma of 1/2.2 would be stored as 45455)
+    unsigned char *data;        // Transparency values
 } rpng_chunk_tRNS;
 
 // Color space information
@@ -298,22 +298,28 @@ typedef struct {
 //------------------------------------------------------------------------
 // Textual data
 typedef struct {
+    unsigned int keyword_length;
+    unsigned int text_length;
     unsigned char *keyword;     // Keyword: 1-80 bytes (must end with NULL separator: /0)
     unsigned char *text;        // Text: n bytes (character string, no NULL terminated required)
 } rpng_chunk_tEXt;
 
 // Compressed textual data
 typedef struct {
-    unsigned char *keyword;     // Keyword: 1-80 bytes (must end with NULL separator: /0)
+    unsigned int keyword_length;
+    unsigned int comp_text_length;
     unsigned char comp;         // Compression method (0 for DEFLATE)
+    unsigned char *keyword;     // Keyword: 1-80 bytes (must end with NULL separator: /0)
     unsigned char *comp_text;   // Compressed text: n bytes
 } rpng_chunk_zTXt;
 
 // International textual data
 typedef struct {
-    unsigned char *keyword;     // Keyword: 1-80 bytes (must end with NULL separator: /0)
+    unsigned int keyword_length;
+    unsigned int text_length;
     unsigned char comp_flag;    // Compression flag (0 for uncompressed text, 1 for compressed text)
     unsigned char comp;         // Compression method (0 for DEFLATE)
+    unsigned char *keyword;     // Keyword: 1-80 bytes (must end with NULL separator: /0)
     unsigned char *lang_tag;    // Language tag (0 or more bytes, must end with NULL separator: /0)
     unsigned char *tr_keyword;  // Translated keyword (0 or more bytes, must end with NULL separator: /0)
     unsigned char *text;        // UTF-8 text (0 or more bytes)
