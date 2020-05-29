@@ -457,7 +457,7 @@ void rpng_chunk_write(const char *filename, rpng_chunk chunk)
     RPNG_FREE(file_data);
 }
 
-// Save text chunk data into PNG
+// Write text chunk data into PNG
 // NOTE: It will be added just after IHDR chunk
 void rpng_chunk_write_text(const char *filename, char *keyword, char *text)
 {
@@ -508,28 +508,28 @@ void rpng_chunk_print_info(const char *filename)
 // Count the chunks in a PNG image from memory buffer
 int rpng_chunk_count_from_memory(const char *buffer)
 {
-    char *file_data_ptr = (char *)buffer;
+    char *buffer_ptr = (char *)buffer;
     int count = 0;
 
     // NOTE: We check minimum file_size for a PNG (Signature + chunk IHDR + chunk IDAT + chunk IEND)
-    if ((file_data_ptr != NULL) && (memcmp(file_data_ptr, png_signature, 8) == 0))  // Check valid PNG file
+    if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
     {
-        file_data_ptr += 8;       // Move pointer after signature
+        buffer_ptr += 8;       // Move pointer after signature
 
-        unsigned int chunk_len = swap_endian(((int *)file_data_ptr)[0]);
-        file_data_ptr += 4;
+        unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
+        buffer_ptr += 4;
 
-        while (memcmp(file_data_ptr, "IEND", 4) != 0) // While IEND chunk not reached
+        while (memcmp(buffer_ptr, "IEND", 4) != 0) // While IEND chunk not reached
         {
-            //printf("Chunk: %c%c%c%c [%i bytes]\n", ((char *)file_data_ptr)[0], ((char *)file_data_ptr)[1], ((char *)file_data_ptr)[2], ((char *)file_data_ptr)[3], chunk_len);
-            file_data_ptr += (4 + chunk_len + 4);   // Skip chunk type FOURCC + chunk data + CRC32
+            //printf("Chunk: %c%c%c%c [%i bytes]\n", ((char *)buffer_ptr)[0], ((char *)buffer_ptr)[1], ((char *)buffer_ptr)[2], ((char *)buffer_ptr)[3], chunk_size);
+            buffer_ptr += (4 + chunk_size + 4);   // Skip chunk type FOURCC + chunk data + CRC32
 
-            chunk_len = swap_endian(((int *)file_data_ptr)[0]);
-            file_data_ptr += 4;  // Skip chunk file_size
+            chunk_size = swap_endian(((int *)buffer_ptr)[0]);
+            buffer_ptr += 4;  // Skip chunk file_size
             count++;
         }
 
-        //printf("Chunk: %c%c%c%c [%i bytes]\n", ((char *)file_data_ptr)[0], ((char *)file_data_ptr)[1], ((char *)file_data_ptr)[2], ((char *)file_data_ptr)[3], chunk_len);
+        //printf("Chunk: %c%c%c%c [%i bytes]\n", ((char *)buffer_ptr)[0], ((char *)buffer_ptr)[1], ((char *)buffer_ptr)[2], ((char *)buffer_ptr)[3], chunk_size);
         count++; // IEND chunk!
     }
 
@@ -539,31 +539,31 @@ int rpng_chunk_count_from_memory(const char *buffer)
 // Read one chunk type from memory buffer
 rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type)
 {
-    char *file_data_ptr = (char *)buffer;
+    char *buffer_ptr = (char *)buffer;
     rpng_chunk chunk = { 0 };
 
     // NOTE: We check minimum file_size for a PNG (Signature + chunk IHDR + chunk IDAT + chunk IEND)
-    if ((file_data_ptr != NULL) && (memcmp(file_data_ptr, png_signature, 8) == 0))  // Check valid PNG file
+    if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
     {
-        file_data_ptr += 8;   // Move pointer after signature
+        buffer_ptr += 8;   // Move pointer after signature
 
-        unsigned int chunk_len = swap_endian(((int *)file_data_ptr)[0]);
+        unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
 
-        while (memcmp(file_data_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
+        while (memcmp(buffer_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
         {
-            if (memcmp(file_data_ptr + 4, chunk_type, 4) == 0)
+            if (memcmp(buffer_ptr + 4, chunk_type, 4) == 0)
             {
-                chunk.length = chunk_len;
-                memcpy(chunk.type, (char *)(file_data_ptr + 4), 4);
-                chunk.data = RPNG_MALLOC(chunk_len);
-                memcpy(chunk.data, file_data_ptr + 8, chunk_len);
-                chunk.crc = swap_endian(((unsigned int *)(file_data_ptr + 8 + chunk_len))[0]);
+                chunk.length = chunk_size;
+                memcpy(chunk.type, (char *)(buffer_ptr + 4), 4);
+                chunk.data = RPNG_MALLOC(chunk_size);
+                memcpy(chunk.data, buffer_ptr + 8, chunk_size);
+                chunk.crc = swap_endian(((unsigned int *)(buffer_ptr + 8 + chunk_size))[0]);
 
                 break;
             }
 
-            file_data_ptr += (4 + 4 + chunk_len + 4);           // Move pointer to next chunk of input data
-            chunk_len = swap_endian(((int *)file_data_ptr)[0]);  // Compute next chunk file_size
+            buffer_ptr += (4 + 4 + chunk_size + 4);           // Move pointer to next chunk of input data
+            chunk_size = swap_endian(((int *)buffer_ptr)[0]);  // Compute next chunk file_size
         }
     }
 
@@ -573,30 +573,30 @@ rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_typ
 // Read all chunks from memory buffer
 rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count)
 {
-    char *file_data_ptr = (char *)buffer;
+    char *buffer_ptr = (char *)buffer;
     rpng_chunk *chunks = NULL;
     int counter = 0;
 
     // NOTE: We check minimum file_size for a PNG (Signature + chunk IHDR + chunk IDAT + chunk IEND)
-    if ((file_data_ptr != NULL) && (memcmp(file_data_ptr, png_signature, 8) == 0))  // Check valid PNG file
+    if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
     {
         // We allocate enough space for 64 chunks
         chunks = (rpng_chunk *)RPNG_CALLOC(RPNG_MAX_CHUNKS_COUNT, sizeof(rpng_chunk));
 
-        file_data_ptr += 8;                       // Move pointer after signature
+        buffer_ptr += 8;                       // Move pointer after signature
 
-        unsigned int chunk_len = swap_endian(((int *)file_data_ptr)[0]);
+        unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
 
-        while (memcmp(file_data_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
+        while (memcmp(buffer_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
         {
-            chunks[counter].length = chunk_len;
-            memcpy(chunks[counter].type, (char *)(file_data_ptr + 4), 4);
-            chunks[counter].data = RPNG_MALLOC(chunk_len);
-            memcpy(chunks[counter].data, file_data_ptr + 8, chunk_len);
-            chunks[counter].crc = swap_endian(((unsigned int *)(file_data_ptr + 8 + chunk_len))[0]);
+            chunks[counter].length = chunk_size;
+            memcpy(chunks[counter].type, (char *)(buffer_ptr + 4), 4);
+            chunks[counter].data = RPNG_MALLOC(chunk_size);
+            memcpy(chunks[counter].data, buffer_ptr + 8, chunk_size);
+            chunks[counter].crc = swap_endian(((unsigned int *)(buffer_ptr + 8 + chunk_size))[0]);
 
-            file_data_ptr += (4 + 4 + chunk_len + 4);   // Move pointer to next chunk
-            chunk_len = swap_endian(((int *)file_data_ptr)[0]);
+            buffer_ptr += (4 + 4 + chunk_size + 4);   // Move pointer to next chunk
+            chunk_size = swap_endian(((int *)buffer_ptr)[0]);
 
             counter++;
 
@@ -604,11 +604,11 @@ rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count)
         }
 
         // Read final IEND chunk
-        chunks[counter].length = chunk_len;
-        memcpy(chunks[counter].type, (char *)(file_data_ptr + 4), 4);
-        chunks[counter].data = RPNG_MALLOC(chunk_len);
-        memcpy(chunks[counter].data, file_data_ptr + 8, chunk_len);
-        chunks[counter].crc = swap_endian(((unsigned int *)(file_data_ptr + 8 + chunk_len))[0]);
+        chunks[counter].length = chunk_size;
+        memcpy(chunks[counter].type, (char *)(buffer_ptr + 4), 4);
+        chunks[counter].data = RPNG_MALLOC(chunk_size);
+        memcpy(chunks[counter].data, buffer_ptr + 8, chunk_size);
+        chunks[counter].crc = swap_endian(((unsigned int *)(buffer_ptr + 8 + chunk_size))[0]);
 
         counter++;
     }
@@ -625,44 +625,44 @@ rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count)
 // NOTE: returns output_data and output_size through parameter 
 char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, int *output_size)
 {
-    char *file_data_ptr = (char *)buffer;
+    char *buffer_ptr = (char *)buffer;
     char *output_buffer = NULL;
-    int out_size = 0;
+    int output_buffer_size = 0;
 
-    if ((file_data_ptr != NULL) && (memcmp(file_data_ptr, png_signature, 8) == 0))  // Check valid PNG file
+    if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
     {
         output_buffer = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);  // Output buffer allocation
         
         memcpy(output_buffer, png_signature, 8);        // Copy PNG signature
-        out_size += 8;
+        output_buffer_size += 8;
         
-        file_data_ptr += 8;       // Move pointer after signature
+        buffer_ptr += 8;       // Move pointer after signature
 
-        unsigned int chunk_len = swap_endian(((int *)file_data_ptr)[0]);
+        unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
 
-        while (memcmp(file_data_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
+        while (memcmp(buffer_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
         {
             // If chunk type is not the requested, just copy input data into output buffer
-            if (memcmp(file_data_ptr + 4, chunk_type, 4) != 0)
+            if (memcmp(buffer_ptr + 4, chunk_type, 4) != 0)
             {
-                memcpy(output_buffer + out_size, file_data_ptr, 4 + 4 + chunk_len + 4);  // Length + FOURCC + chunk_len + CRC32
-                out_size += (4 + 4 + chunk_len + 4);
+                memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + chunk_size + 4);  // Length + FOURCC + chunk_size + CRC32
+                output_buffer_size += (4 + 4 + chunk_size + 4);
             }
 
-            file_data_ptr += (4 + 4 + chunk_len + 4);   // Move pointer to next chunk
-            chunk_len = swap_endian(((int *)file_data_ptr)[0]);
+            buffer_ptr += (4 + 4 + chunk_size + 4);   // Move pointer to next chunk
+            chunk_size = swap_endian(((int *)buffer_ptr)[0]);
         }
 
-        // Save IEND chunk
-        memcpy(output_buffer + out_size, file_data_ptr, 4 + 4 + 4);
-        out_size += 12;
+        // Write IEND chunk
+        memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + 4);
+        output_buffer_size += 12;
         
         // Resize output buffer
-        char *output_buffer_sized = RPNG_REALLOC(output_buffer, out_size);
+        char *output_buffer_sized = RPNG_REALLOC(output_buffer, output_buffer_size);
         if (output_buffer_sized != NULL) output_buffer = output_buffer_sized;
     }
 
-    *output_size = out_size;
+    *output_size = output_buffer_size;
     return output_buffer;
 }
 
@@ -670,45 +670,50 @@ char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, 
 // NOTE: returns output_data and output_size through parameter 
 char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_size)
 {
-    char *file_data_ptr = (char *)buffer;
+    char *buffer_ptr = (char *)buffer;
     char *output_buffer = NULL;
-    int out_size = 0;
+    int output_buffer_size = 0;
 
-    if ((file_data_ptr != NULL) && (memcmp(file_data_ptr, png_signature, 8) == 0))  // Check valid PNG file
+    if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
     {
+        bool preserve_palette_transparency = false;
+        
         output_buffer = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);  // Output buffer allocation
         
         memcpy(output_buffer, png_signature, 8);        // Copy PNG signature
-        out_size += 8;
-        file_data_ptr += 8;       // Move pointer after signature
+        output_buffer_size += 8;
+        buffer_ptr += 8;       // Move pointer after signature
 
-        unsigned int chunk_len = swap_endian(((int *)file_data_ptr)[0]);
+        unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
 
-        while (memcmp(file_data_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
+        while (memcmp(buffer_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
         {
+            if (memcmp(buffer_ptr + 4, "PLTE", 4) == 0) preserve_palette_transparency = true;
+            
             // If chunk type is mandatory, just copy input data into output buffer
-            if ((memcmp(file_data_ptr + 4, "IHDR", 4) == 0) ||
-                (memcmp(file_data_ptr + 4, "PLTE", 4) == 0) ||
-                (memcmp(file_data_ptr + 4, "IDAT", 4) == 0))
+            if ((memcmp(buffer_ptr + 4, "IHDR", 4) == 0) ||
+                (memcmp(buffer_ptr + 4, "PLTE", 4) == 0) ||
+                (memcmp(buffer_ptr + 4, "IDAT", 4) == 0) ||
+                (preserve_palette_transparency && (memcmp(buffer_ptr + 4, "tRNS", 4) == 0)))
             {
-                memcpy(output_buffer + out_size, file_data_ptr, 4 + 4 + chunk_len + 4);  // Length + FOURCC + chunk_len + CRC32
-                out_size += (4 + 4 + chunk_len + 4);
+                memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + chunk_size + 4);  // Length + FOURCC + chunk_size + CRC32
+                output_buffer_size += (4 + 4 + chunk_size + 4);
             }
 
-            file_data_ptr += (4 + 4 + chunk_len + 4);   // Move pointer to next chunk
-            chunk_len = swap_endian(((int *)file_data_ptr)[0]);
+            buffer_ptr += (4 + 4 + chunk_size + 4);   // Move pointer to next chunk
+            chunk_size = swap_endian(((int *)buffer_ptr)[0]);
         }
 
-        // Save IEND chunk
-        memcpy(output_buffer + out_size, file_data_ptr, 4 + 4 + 4);
-        out_size += 12;
+        // Write IEND chunk
+        memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + 4);
+        output_buffer_size += 12;
         
         // Resize output buffer
-        char *output_buffer_sized = RPNG_REALLOC(output_buffer, out_size);
+        char *output_buffer_sized = RPNG_REALLOC(output_buffer, output_buffer_size);
         if (output_buffer_sized != NULL) output_buffer = output_buffer_sized;
     }
 
-    *output_size = out_size;
+    *output_size = output_buffer_size;
     return output_buffer;
 }
 
@@ -716,59 +721,59 @@ char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_si
 // NOTE: returns output data file_size
 char *rpng_chunk_write_to_memory(const char *buffer, rpng_chunk chunk, int *output_size)
 {
-    char *file_data_ptr = (char *)buffer;
+    char *buffer_ptr = (char *)buffer;
     char *output_buffer = NULL;
-    int out_size = 0;
+    int output_buffer_size = 0;
 
-    if ((file_data_ptr != NULL) && (memcmp(file_data_ptr, png_signature, 8) == 0))  // Check valid PNG file
+    if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
     {
         output_buffer = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
         
         memcpy(output_buffer, png_signature, 8);        // Copy PNG signature
-        out_size += 8;
-        file_data_ptr += 8;       // Move pointer after signature
+        output_buffer_size += 8;
+        buffer_ptr += 8;       // Move pointer after signature
 
-        unsigned int chunk_len = swap_endian(((int *)file_data_ptr)[0]);
+        unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
 
-        while (memcmp(file_data_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
+        while (memcmp(buffer_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
         {
-            memcpy(output_buffer + out_size, file_data_ptr, 4 + 4 + chunk_len + 4);  // Length + FOURCC + chunk_len + CRC32
-            out_size += (4 + 4 + chunk_len + 4);
+            memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + chunk_size + 4);  // Length + FOURCC + chunk_size + CRC32
+            output_buffer_size += (4 + 4 + chunk_size + 4);
 
             // Check if we just copied the IHDR chunk to append our chunk after it
-            if (memcmp(file_data_ptr + 4, "IHDR", 4) == 0)
+            if (memcmp(buffer_ptr + 4, "IHDR", 4) == 0)
             {
-                int lengthBE = swap_endian(chunk.length);
-                memcpy(output_buffer + out_size, &lengthBE, sizeof(int));           // Write chunk length
-                memcpy(output_buffer + out_size + 4, chunk.type, 4);                // Write chunk type
-                memcpy(output_buffer + out_size + 4 + 4, chunk.data, chunk.length); // Write chunk data
+                int chunk_length_be = swap_endian(chunk.length);
+                memcpy(output_buffer + output_buffer_size, &chunk_length_be, sizeof(int));           // Write chunk length
+                memcpy(output_buffer + output_buffer_size + 4, chunk.type, 4);                // Write chunk type
+                memcpy(output_buffer + output_buffer_size + 4 + 4, chunk.data, chunk.length); // Write chunk data
 
                 unsigned char *type_data = RPNG_MALLOC(4 + chunk.length);
                 memcpy(type_data, chunk.type, 4);
                 memcpy(type_data + 4, chunk.data, chunk.length);
                 unsigned int crc = compute_crc32(type_data, 4 + chunk.length);
                 crc = swap_endian(crc);
-                memcpy(output_buffer + out_size + 4 + 4 + chunk.length, &crc, 4);   // Write CRC32 (computed over type + data)
+                memcpy(output_buffer + output_buffer_size + 4 + 4 + chunk.length, &crc, 4);   // Write CRC32 (computed over type + data)
                 
                 RPNG_FREE(type_data);
 
-                out_size += (4 + 4 + chunk.length + 4);  // Update output file file_size with new chunk
+                output_buffer_size += (4 + 4 + chunk.length + 4);  // Update output file file_size with new chunk
             }
 
-            file_data_ptr += (4 + 4 + chunk_len + 4);           // Move pointer to next chunk of input data
-            chunk_len = swap_endian(((int *)file_data_ptr)[0]);  // Compute next chunk file_size
+            buffer_ptr += (4 + 4 + chunk_size + 4);           // Move pointer to next chunk of input data
+            chunk_size = swap_endian(((int *)buffer_ptr)[0]);  // Compute next chunk file_size
         }
 
-        // Save IEND chunk
-        memcpy(output_buffer + out_size, file_data_ptr, 4 + 4 + 4);
-        out_size += 12;
+        // Write IEND chunk
+        memcpy(output_buffer + output_buffer_size, buffer_ptr, 4 + 4 + 4);
+        output_buffer_size += 12;
         
         // Resize output buffer
-        char *output_buffer_sized = RPNG_REALLOC(output_buffer, out_size);
+        char *output_buffer_sized = RPNG_REALLOC(output_buffer, output_buffer_size);
         if (output_buffer_sized != NULL) output_buffer = output_buffer_sized;
     }
 
-    *output_size = out_size;
+    *output_size = output_buffer_size;
     return output_buffer;
 }
 
@@ -904,7 +909,7 @@ static char *load_file_to_buffer(const char *filename, int *bytes_read)
         return data;
 }
 
-// Save data to file from buffer
+// Write data to file from buffer
 static void save_file_from_buffer(const char *filename, void *data, int bytesToWrite)
 {
 #if !defined(RPNG_NO_STDIO)
