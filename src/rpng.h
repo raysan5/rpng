@@ -172,6 +172,14 @@ RPNGAPI void rpng_chunk_write(const char *filename, rpng_chunk data);           
 
 // Write specific chunks to file
 RPNGAPI void rpng_chunk_write_text(const char *filename, char *keyword, char *text);        // Write tEXt chunk
+RPNGAPI void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text);   // Write zTXt chunk, DEFLATE compressed text
+RPNGAPI void rpng_chunk_write_gamma(const char *filename, float gamma);                     // Write gAMA chunk (stored as int, gamma*100000)
+RPNGAPI void rpng_chunk_write_srgb(const char *filename, int srgb_type);                    // Write sRGB chunk, requires gAMA chunk
+RPNGAPI void rpng_chunk_write_time(const char *filename, short year, char month, char day, char hour, char min, char sec);  // Write tIME chunk
+RPNGAPI void rpng_chunk_write_physical_size(const char *filename, int pixels_unit_x, int pixels_unit_y, bool meters);       // Write pHYs chunk
+RPNGAPI void rpng_chunk_write_chroma(const char *filename, float white_x, float white_y, float red_x, float red_y, float green_x, float green_y, float blue_x, float blue_y); // Write cHRM chunk
+
+// Read and write chunks from memory buffer
 RPNGAPI int rpng_chunk_count_from_memory(const char *buffer);                                             // Count the chunks in a PNG image on memory
 RPNGAPI rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type);               // Read one chunk type on memory
 RPNGAPI rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count);                      // Read all chunks on memory
@@ -485,6 +493,66 @@ void rpng_chunk_write_text(const char *filename, char *keyword, char *text)
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
+
+// Write zTXt chunk, DEFLATE compressed text
+void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text)
+{
+    int file_size = 0;
+    char *file_data = load_file_to_buffer(filename, &file_size);
+
+    rpng_chunk chunk = { 0 };
+    int keyword_len = strlen(keyword);
+    int text_len = strlen(text);
+
+/*
+    chunk.length = keyword_len + 1 + text_len;
+    memcpy(chunk.type, "zTXt", 4);
+    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    memcpy(((unsigned char*)chunk.data), keyword, keyword_len);
+    memcpy(((unsigned char*)chunk.data) + keyword_len + 1, text, text_len);
+    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
+
+    int output_buffer_size = 0;
+    char *output_buffer = rpng_chunk_write_from_memory(buffer, chunk, &output_buffer_size);
+
+    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+*/
+
+    RPNG_FREE(file_output);
+    RPNG_FREE(file_data);
+}
+
+// Write gAMA chunk (stored as int, gamma*100000)
+void rpng_chunk_write_gamma(const char *filename, float gamma)
+{
+    
+}
+
+// Write sRGB chunk, requires gAMA chunk
+void rpng_chunk_write_srgb(const char *filename, int srgb_type)
+{
+    
+}
+
+// Write tIME chunk
+void rpng_chunk_write_time(const char *filename, short year, char month, char day, char hour, char min, char sec)
+{
+    
+    
+}
+
+// Write pHYs chunk
+void rpng_chunk_write_physical_size(const char *filename, int pixels_unit_x, int pixels_unit_y, bool meters)
+{
+    
+}
+
+// Write cHRM chunk
+void rpng_chunk_write_chroma(const char *filename, float white_x, float white_y, float red_x, float red_y, float green_x, float green_y, float blue_x, float blue_y)
+{
+    
+}
+
 
 // Output info about the chunks
 void rpng_chunk_print_info(const char *filename)
