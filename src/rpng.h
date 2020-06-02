@@ -162,29 +162,31 @@ extern "C" {            // Prevents name mangling of functions
 // Module Functions Declaration
 //----------------------------------------------------------------------------------
 
-// Functions operating on file (use memory versions internally)
+// Read and write chunks from file
 RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
 RPNGAPI rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);    // Read one chunk type
 RPNGAPI rpng_chunk *rpng_chunk_read_all(const char *filename, int *count);           // Read all chunks
 RPNGAPI void rpng_chunk_remove(const char *filename, const char *chunk_type);        // Remove one chunk type
 RPNGAPI void rpng_chunk_remove_ancillary(const char *filename);                      // Remove all chunks except: IHDR-IDAT-IEND
 RPNGAPI void rpng_chunk_write(const char *filename, rpng_chunk data);                // Write one new chunk after IHDR (any kind)
-RPNGAPI void rpng_chunk_write_text(const char *filename, char *keyword, char *text); // Write tEXt chunk
-RPNGAPI void rpng_chunk_print_info(const char *filename);                            // Output info about the chunks
-RPNGAPI bool rpng_chunk_check_all_valid(const char *filename);                       // Check chunks CRC is valid
-RPNGAPI void rpng_chunk_combine_idata(const char *filename);                         // Combine multiple IDAT chunks into a single one
-RPNGAPI void rpng_chunk_split_idata(const char *filename, int split_size);           // Split one IDAT chunk into multiple ones
 
-// Functions operating on memory buffer
+// Write specific chunks to file
+RPNGAPI void rpng_chunk_write_text(const char *filename, char *keyword, char *text);        // Write tEXt chunk
 RPNGAPI int rpng_chunk_count_from_memory(const char *buffer);                                             // Count the chunks in a PNG image on memory
 RPNGAPI rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type);               // Read one chunk type on memory
 RPNGAPI rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count);                      // Read all chunks on memory
-RPNGAPI char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, int *output_size);      // Remove one chunk type on memory
-RPNGAPI char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_size);                    // Remove all chunks except: IHDR-IDAT-IEND
-RPNGAPI char *rpng_chunk_write_to_memory(const char *buffer, rpng_chunk chunk, int *output_size);               // Write one new chunk after IHDR (any kind)
-RPNGAPI char *rpng_chunk_write_text_to_memory(const char *buffer, char *keyword, char *text, int *output_size); // Write one new tEXt chunk
-RPNGAPI char *rpng_chunk_combine_idata_from_memory(char *buffer, int *output_size);                       // Combine multiple IDAT chunks into a single one
-RPNGAPI char *rpng_chunk_split_idata_from_memory(char *buffer, int split_size, int *output_size);         // Split one IDAT chunk into multiple ones
+RPNGAPI char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, int *output_size);          // Remove one chunk type on memory
+RPNGAPI char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_size);                        // Remove all chunks except: IHDR-IDAT-IEND
+RPNGAPI char *rpng_chunk_write_from_memory(const char *buffer, rpng_chunk chunk, int *output_size);                 // Write one new chunk after IHDR (any kind)
+RPNGAPI char *rpng_chunk_write_text_from_memory(const char *buffer, char *keyword, char *text, int *output_size);   // Write one new tEXt chunk
+
+// Chunk utilities
+RPNGAPI void rpng_chunk_print_info(const char *filename);                            // Output info about the chunks
+RPNGAPI bool rpng_chunk_check_all_valid(const char *filename);                       // Check chunks CRC is valid
+RPNGAPI void rpng_chunk_combine_image_data(const char *filename);                    // Combine multiple IDAT chunks into a single one
+RPNGAPI void rpng_chunk_split_image_data(const char *filename, int split_size);      // Split one IDAT chunk into multiple ones
+RPNGAPI char *rpng_chunk_combine_image_data_from_memory(char *buffer, int *output_size);                        // Combine multiple IDAT chunks into a single one
+RPNGAPI char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_size, int *output_size);          // Split one IDAT chunk into multiple ones
 
 #ifdef __cplusplus
 }
@@ -329,7 +331,7 @@ typedef struct {
 //------------------------------------------------------------------------
 
 // Background color
-// Color type 3 (indexed color) -> Palette index:  1 byte
+// Color type  3 (indexed color) -> Palette index:  1 byte
 // Color types 0 and 4 (gray or gray + alpha) -> Gray:  2 bytes, range 0 .. (2^bitdepth)-1
 // Color types 2 and 6 (truecolor, with or without alpha)
 //      Red:   2 bytes, range 0 .. (2^bitdepth)-1
@@ -460,7 +462,7 @@ void rpng_chunk_write(const char *filename, rpng_chunk chunk)
     char *file_data = load_file_to_buffer(filename, &file_size);
 
     int file_output_size = 0;
-    char *file_output = rpng_chunk_write_to_memory(file_data, chunk, &file_output_size);
+    char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
     if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
 
@@ -476,7 +478,7 @@ void rpng_chunk_write_text(const char *filename, char *keyword, char *text)
     char *file_data = load_file_to_buffer(filename, &file_size);
 
     int file_output_size = 0;
-    char *file_output = rpng_chunk_write_text_to_memory(file_data, keyword, text, &file_output_size);
+    char *file_output = rpng_chunk_write_text_from_memory(file_data, keyword, text, &file_output_size);
 
     if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
 
@@ -547,13 +549,13 @@ bool rpng_chunk_check_all_valid(const char *filename)
 }
 
 // Combine multiple IDAT chunks into a single one
-void rpng_chunk_combine_idata(const char *filename)
+void rpng_chunk_combine_image_data(const char *filename)
 {
     int file_size = 0;
     char *file_data = load_file_to_buffer(filename, &file_size);
 
     int file_output_size = 0;
-    char *file_output = rpng_chunk_combine_idata_from_memory(file_data, &file_output_size);
+    char *file_output = rpng_chunk_combine_image_data_from_memory(file_data, &file_output_size);
 
     // TODO: Review this security check, it's horrible...
     if (file_output_size < (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
@@ -563,13 +565,13 @@ void rpng_chunk_combine_idata(const char *filename)
 }
 
 // Split one IDAT chunk into multiple ones
-void rpng_chunk_split_idata(const char *filename, int split_size)
+void rpng_chunk_split_image_data(const char *filename, int split_size)
 {
     int file_size = 0;
     char *file_data = load_file_to_buffer(filename, &file_size);
 
     int file_output_size = 0;
-    char *file_output = rpng_chunk_split_idata_from_memory(file_data, split_size, &file_output_size);
+    char *file_output = rpng_chunk_split_image_data_from_memory(file_data, split_size, &file_output_size);
 
     // TODO: Review this security check, it's horrible...
     if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
@@ -795,7 +797,7 @@ char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_si
 
 // Write one new chunk after IHDR (any kind) to memory buffer
 // NOTE: returns output data file_size
-char *rpng_chunk_write_to_memory(const char *buffer, rpng_chunk chunk, int *output_size)
+char *rpng_chunk_write_from_memory(const char *buffer, rpng_chunk chunk, int *output_size)
 {
     char *buffer_ptr = (char *)buffer;
     char *output_buffer = NULL;
@@ -855,7 +857,7 @@ char *rpng_chunk_write_to_memory(const char *buffer, rpng_chunk chunk, int *outp
 
 // Write tEXt chunk to memory buffer
 // NOTE: returns output data file_size
-char *rpng_chunk_write_text_to_memory(const char *buffer, char *keyword, char *text, int *output_size)
+char *rpng_chunk_write_text_from_memory(const char *buffer, char *keyword, char *text, int *output_size)
 {
     rpng_chunk chunk = { 0 };
     int keyword_len = strlen(keyword);
@@ -866,17 +868,17 @@ char *rpng_chunk_write_text_to_memory(const char *buffer, char *keyword, char *t
     chunk.data = RPNG_CALLOC(chunk.length, 1);
     memcpy(((unsigned char*)chunk.data), keyword, keyword_len);
     memcpy(((unsigned char*)chunk.data) + keyword_len + 1, text, text_len);
-    chunk.crc = 0;  // Computed by rpng_chunk_write_to_memory()
+    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
 
     int output_buffer_size = 0;
-    char *output_buffer = rpng_chunk_write_to_memory(buffer, chunk, &output_buffer_size);
+    char *output_buffer = rpng_chunk_write_from_memory(buffer, chunk, &output_buffer_size);
 
     *output_size = output_buffer_size;
     return output_buffer;
 }
 
 // Combine multiple IDAT chunks into a single one
-char *rpng_chunk_combine_idata_from_memory(char *buffer, int *output_size)
+char *rpng_chunk_combine_image_data_from_memory(char *buffer, int *output_size)
 {
     char *buffer_ptr = (char *)buffer;
     char *output_buffer = NULL;
@@ -938,7 +940,7 @@ char *rpng_chunk_combine_idata_from_memory(char *buffer, int *output_size)
 }
 
 // Split one IDAT chunk into multiple ones
-char *rpng_chunk_split_idata_from_memory(char *buffer, int split_size, int *output_size)
+char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_size, int *output_size)
 {
     char *buffer_ptr = (char *)buffer;
     char *output_buffer = NULL;

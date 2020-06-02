@@ -84,12 +84,12 @@ int main(int argc, char *argv[])
         
         // TEST: Split IDAT chunks
         rpng_chunk_print_info(argv[1]);
-        rpng_chunk_split_idata(argv[1], 16384);
+        rpng_chunk_split_image_data(argv[1], 16384);
         rpng_chunk_print_info(argv[1]);
         
         // TEST: Combine IDAT chunks
         rpng_chunk_print_info(argv[1]);
-        rpng_chunk_combine_idata(argv[1]);
+        rpng_chunk_combine_image_data(argv[1]);
         rpng_chunk_print_info(argv[1]);
     }
     else printf("WARNING: No input file provided.\n");
