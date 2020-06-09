@@ -14,8 +14,55 @@
 
 #include <stdio.h>      // Required for: printf()
 
+#include <math.h>
+
+#include "raylib.h"     // Just used for stbiw testing (ExportImage())
+
 int main(int argc, char *argv[])
 {
+#if 1
+    // TEST: Create a colorful image: 128x128, RGB
+    int width = 128;
+    int height = 128;
+    char *data = RPNG_MALLOC(width*height*3);
+    double l = hypot(width, height);
+    
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            data[(y*width + x)*3] = floor(255*hypot(0 - x, height - y)/l);
+            data[(y*width + x)*3 + 1] = floor(255*hypot(width - x, height - y)/l);
+            data[(y*width + x)*3 + 2] = floor(255*hypot(width - x, 0 - y)/l);
+            //data[(y*width + x)*3] = 255;
+        }
+    }
+    
+    Image image = { data, 128, 128, 1, UNCOMPRESSED_R8G8B8 };
+    ExportImage(image, "test_pixels_raylib.png");
+    rpng_create_image("test_pixels_rpng.png", data, 128, 128, 8, 3);
+#else
+    // TEST: Create a red pixels image 4x4, RGB
+    int width = 4;
+    int height = 4;
+    char *data = RPNG_MALLOC(width*height*3);
+
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            data[(y*width + x)*3] = 0xff;
+            data[(y*width + x)*3 + 1] = 0x00;
+            data[(y*width + x)*3 + 2] = 0x00;
+            //data[(y*width + x)*3 + 3] = 0xff;
+        }
+    }
+    
+    Image image = { data, 4, 4, 1, UNCOMPRESSED_R8G8B8 };
+    ExportImage(image, "red_pixels_raylib.png");
+    rpng_create_image("red_pixels_rpng.png", data, 4, 4, 8, 3);
+#endif
+
     if (argc > 1)
     {
         // TEST: Chunk count and print chunk info
