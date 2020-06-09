@@ -162,6 +162,16 @@ extern "C" {            // Prevents name mangling of functions
 // Module Functions Declaration
 //----------------------------------------------------------------------------------
 
+// Create basic PNG from image data (IHDR, IDAT, IEND)
+//  - Bit depth defines every color channel size, supported values: 8, 16
+//  - Format defines pixel channels, supported values: 
+//      0  Grayscale (1 channel), 
+//      2  RGB (3 channels)
+//      4  Gray + Alpha (2 channels)
+//      6  RGBA (4 channels)
+// NOTE: It's up to the user to provide the right data format for image creation, data is compressed with DEFLATE algorythm
+RPNGAPI void rpng_create_image(const char *filename, const char *data, int width, int height, int bit_depth, int format);
+
 // Read and write chunks from file
 RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
 RPNGAPI rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);    // Read one chunk type
@@ -217,6 +227,8 @@ RPNGAPI char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_si
 #include <stdlib.h>         // Required for: malloc(), calloc(), free()
 #include <string.h>         // Required for: memcmp(), memcpy()
 
+//#include "miniz.h"
+
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
@@ -231,9 +243,10 @@ typedef struct {
     unsigned int height;        // Image width
     unsigned char bit_depth;    // Bit depth
     unsigned char color_type;   // Pixel format: 0 - Grayscale, 2 - RGB, 3 - Indexed, 4 - GrayAlpha, 6 - RGBA
-    unsigned char compression;  // Compression method: 0
+    unsigned char compression;  // Compression method: 0 (deflate)
     unsigned char filter;       // Filter method: 0 (default)
     unsigned char interlace;    // Interlace scheme (optional): 0 (none)
+    // WARNING: 3 bytes of padding required for proper alignment!!!
 } rpng_chunk_IHDR;
 
 // Palette
@@ -371,6 +384,35 @@ typedef struct {
 //sPLT Suggested palette
 //hIST Palette histogram
 
+//===================================================================
+//                              SDEFL
+// DEFLATE algorythm implementation: https://github.com/vurtun/sdefl
+//===================================================================
+#define SDEFL_MAX_OFF       (1 << 15)
+#define SDEFL_WIN_SIZ       SDEFL_MAX_OFF
+#define SDEFL_WIN_MSK       (SDEFL_WIN_SIZ-1)
+
+#define SDEFL_MIN_MATCH     4
+#define SDEFL_MAX_MATCH     258
+
+#define SDEFL_HASH_BITS     19
+#define SDEFL_HASH_SIZ      (1 << SDEFL_HASH_BITS)
+#define SDEFL_HASH_MSK      (SDEFL_HASH_SIZ-1)
+#define SDEFL_NIL           (-1)
+
+#define SDEFL_LVL_MIN       0
+#define SDEFL_LVL_DEF       5
+#define SDEFL_LVL_MAX       8
+
+struct sdefl {
+    int bits, cnt;
+    int tbl[SDEFL_HASH_SIZ];
+    int prv[SDEFL_WIN_SIZ];
+};
+extern int sdefl_bound(int in_len);
+extern int sdeflate(struct sdefl *s, unsigned char *out, const unsigned char *in, int in_len, int lvl);
+extern int zsdeflate(struct sdefl *s, unsigned char *out, const unsigned char *in, int in_len, int lvl);
+
 //----------------------------------------------------------------------------------
 // Global Variables Definition
 //----------------------------------------------------------------------------------
@@ -386,9 +428,106 @@ static unsigned int compute_crc32(unsigned char *buffer, int size); // Compute C
 static char *load_file_to_buffer(const char *filename, int *bytes_read);
 static void save_file_from_buffer(const char *filename, void *data, int bytesToWrite);
 
+// Compression and decompression
+//static int sdeflate(struct sdefl *s, unsigned char *dst, const unsigned char *src, int src_len);
+//static unsigned sadler32(unsigned adler32, unsigned char *buffer, unsigned buf_len);
+
 //----------------------------------------------------------------------------------
 // Module Functions Definition
 //----------------------------------------------------------------------------------
+
+// Create basic PNG from image data (IHDR, IDAT, IEND)
+//  - Bit depth defines every color channel size, supported values: 8, 16
+//  - Color channels defines pixel channels, supported values: 1, 2, 3, 4
+// NOTE: It's up to the user to provide the right data format for image creation, data is compressed with DEFLATE algorythm
+void rpng_create_image(const char *filename, const char *data, int width, int height, int bit_depth, int color_channels)
+{
+    if ((bit_depth != 8) && (bit_depth != 16)) return;  // Bit depth not supported
+
+    int color_type = -1;
+    if (color_channels == 1) color_type = 0;        // Grayscale
+    else if (color_channels == 2) color_type = 4;   // Gray + Alpha
+    else if (color_channels == 3) color_type = 2;   // RGB
+    else if (color_channels == 4) color_type = 6;   // RGBA
+    
+    if (color_type == -1) return;   // Number of channels not supported
+
+    rpng_chunk_IHDR image_info = { 0 };
+    image_info.width = swap_endian(width);
+    image_info.height = swap_endian(height);
+    image_info.bit_depth = (unsigned char)bit_depth;
+    image_info.color_type = (unsigned char)color_type;
+    
+    //unsigned int data_size = width*height*color_channels*(bit_depth/8);
+    
+    //https://stackoverflow.com/questions/9050260/what-does-a-zlib-header-look-like
+    //https://tools.ietf.org/html/rfc1950
+    //https://www.w3.org/TR/PNG-Encoders.html#E.Filter-selection
+    
+    // Image pre-processing to append filter type byte to every scanline
+    // For the moment just adding filter type 0 (None) just to test
+    char filter_type = 0;
+    int scanline_size = width*color_channels*(bit_depth/8);
+    unsigned int data_size_filtered = (scanline_size + 1)*height;   // Adding 1 byte per scanline filter
+    unsigned char *data_filtered = (unsigned char *)RPNG_CALLOC(data_size_filtered, 1);
+    
+    for (int y = 0; y < height; y++)
+    {
+        data_filtered[(scanline_size + 1)*y] = filter_type;
+        memcpy(data_filtered + (scanline_size + 1)*y + 1, data + scanline_size*y, scanline_size);
+    }
+
+    // TODO: ISSUE: When opening image with TweakPNG (that uses libpng), there is an error on zlib stream: [libpng] Not enough image data
+    struct sdefl *sde = RPNG_CALLOC(sizeof(struct sdefl), 1);
+    int bounds = sdefl_bound(data_size_filtered);
+    unsigned char *comp_data = (unsigned char *)RPNG_CALLOC(bounds, 1);
+    int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_size_filtered, 8);   // Compression level 8, same as stbwi
+    RPNG_FREE(sde);
+
+    // Security check to verify compression worked
+    if (comp_data_size > 0)
+    {
+        // Create the PNG in memory
+        unsigned char *file_output = (unsigned char *)RPNG_CALLOC(8 + (13 + 12) + (comp_data_size + 12) + (12), 1); // Signature + IHDR + IDAT + IEND
+        int file_output_size = 0;
+        
+        // Write PNG signature
+        memcpy(file_output, png_signature, 8);
+        
+        // Write PNG chunk IHDR
+        unsigned int length_IHDR = 13;
+        length_IHDR = swap_endian(length_IHDR);
+        memcpy(file_output + 8, &length_IHDR, 4);
+        memcpy(file_output + 8 + 4, "IHDR", 4);
+        memcpy(file_output + 8 + 4 + 4, &image_info, 13);
+        unsigned int crc = compute_crc32(file_output + 8 + 4, 4 + 13);
+        crc = swap_endian(crc);
+        memcpy(file_output + 8 + 8 + 13, &crc, 4);
+        file_output_size += (8 + 12 + 13);
+        
+        // Write PNG chunk IDAT
+        unsigned int length_IDAT = comp_data_size;
+        length_IDAT = swap_endian(length_IDAT);
+        memcpy(file_output + file_output_size, &length_IDAT, 4);
+        memcpy(file_output + file_output_size + 4, "IDAT", 4);
+        memcpy(file_output + file_output_size + 8, comp_data, comp_data_size);
+        crc = compute_crc32(file_output + file_output_size + 4, 4 + comp_data_size);
+        crc = swap_endian(crc);
+        memcpy(file_output + file_output_size + 8 + comp_data_size, &crc, 4);
+        file_output_size += (comp_data_size + 12);
+        
+        // Write PNG chunk IEND
+        unsigned char chunk_IEND[12] = { 0, 0, 0, 0, 'I', 'E', 'N', 'D', 0xAE, 0x42, 0x60, 0x82 };
+        memcpy(file_output + file_output_size, chunk_IEND, 12);
+        file_output_size += 12;
+        
+        save_file_from_buffer(filename, file_output, file_output_size);
+        
+        RPNG_FREE(file_output);
+    }
+    
+    RPNG_FREE(comp_data);
+}
 
 // Count number of PNG chunks
 int rpng_chunk_count(const char *filename)
@@ -493,7 +632,7 @@ void rpng_chunk_write_text(const char *filename, char *keyword, char *text)
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
-
+/*
 // Write zTXt chunk, DEFLATE compressed text
 void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text)
 {
@@ -503,20 +642,6 @@ void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text)
     rpng_chunk chunk = { 0 };
     int keyword_len = strlen(keyword);
     int text_len = strlen(text);
-
-/*
-    chunk.length = keyword_len + 1 + text_len;
-    memcpy(chunk.type, "zTXt", 4);
-    chunk.data = RPNG_CALLOC(chunk.length, 1);
-    memcpy(((unsigned char*)chunk.data), keyword, keyword_len);
-    memcpy(((unsigned char*)chunk.data) + keyword_len + 1, text, text_len);
-    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
-
-    int output_buffer_size = 0;
-    char *output_buffer = rpng_chunk_write_from_memory(buffer, chunk, &output_buffer_size);
-
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
-*/
 
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
@@ -552,7 +677,7 @@ void rpng_chunk_write_chroma(const char *filename, float white_x, float white_y,
 {
     
 }
-
+*/
 
 // Output info about the chunks
 void rpng_chunk_print_info(const char *filename)
@@ -760,8 +885,8 @@ rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count)
     }
 
     // Reallocate chunks file_size
-    rpng_chunk *temp = RPNG_REALLOC(chunks, counter*sizeof(rpng_chunk));
-    if (temp != NULL) chunks = temp;
+    rpng_chunk *chunks_resized = RPNG_REALLOC(chunks, counter*sizeof(rpng_chunk));
+    if (chunks_resized != NULL) chunks = chunks_resized;
 
     *count = counter;
     return chunks;
@@ -1227,5 +1352,284 @@ static void save_file_from_buffer(const char *filename, void *data, int bytesToW
     #warning No FILE I / O API, RPNG_NO_STDIO defined
 #endif
 }
+
+//===================================================================
+//                              SDEFL
+// DEFLATE algorythm implementation: https://github.com/vurtun/sdefl
+//===================================================================
+
+#define SDEFL_ZLIB_HDR      (0x01)
+
+static const unsigned char sdefl_mirror[256] = {
+    #define R2(n) n, n + 128, n + 64, n + 192
+    #define R4(n) R2(n), R2(n + 32), R2(n + 16), R2(n + 48)
+    #define R6(n) R4(n), R4(n +  8), R4(n +  4), R4(n + 12)
+    R6(0), R6(2), R6(1), R6(3),
+};
+static unsigned
+sdefl_adler32(unsigned adler32, const unsigned char *in, int in_len)
+{
+    #define SDEFL_ADLER_INIT  (1)
+    const unsigned ADLER_MOD = 65521;
+    unsigned s1 = adler32 & 0xffff;
+    unsigned s2 = adler32 >> 16;
+    unsigned blk_len, i;
+
+    blk_len = in_len % 5552;
+    while (in_len) {
+        for (i=0; i + 7 < blk_len; i += 8) {
+            s1 += in[0]; s2 += s1;
+            s1 += in[1]; s2 += s1;
+            s1 += in[2]; s2 += s1;
+            s1 += in[3]; s2 += s1;
+            s1 += in[4]; s2 += s1;
+            s1 += in[5]; s2 += s1;
+            s1 += in[6]; s2 += s1;
+            s1 += in[7]; s2 += s1;
+            in += 8;
+        }
+        for (; i < blk_len; ++i)
+            s1 += *in++, s2 += s1;
+        s1 %= ADLER_MOD; s2 %= ADLER_MOD;
+        in_len -= blk_len;
+        blk_len = 5552;
+    } return (unsigned)(s2 << 16) + (unsigned)s1;
+}
+static int
+sdefl_npow2(int n)
+{
+    n--;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    return (int)++n;
+}
+static int
+sdefl_ilog2(int n)
+{
+    #define lt(n) n,n,n,n, n,n,n,n, n,n,n,n ,n,n,n,n
+    static const char tbl[256] = {-1,0,1,1,2,2,2,2,3,3,3,3,
+        3,3,3,3,lt(4),lt(5),lt(5),lt(6),lt(6),lt(6),lt(6),
+        lt(7),lt(7),lt(7),lt(7),lt(7),lt(7),lt(7),lt(7)
+    }; int tt, t;
+    if ((tt = (n >> 16)))
+        return (t = (tt >> 8)) ? 24+tbl[t]: 16+tbl[tt];
+    else return (t = (n >> 8)) ? 8+tbl[t]: tbl[n];
+    #undef lt
+}
+static unsigned
+sdefl_uload32(const void *p)
+{
+    /* hopefully will be optimized to an unaligned read */
+    unsigned int n = 0;
+    memcpy(&n, p, sizeof(n));
+    return n;
+}
+static unsigned
+sdefl_hash32(const void *p)
+{
+    unsigned n = sdefl_uload32(p);
+    return (n*0x9E377989)>>(32-SDEFL_HASH_BITS);
+}
+static unsigned char*
+sdefl_put(unsigned char *dst, struct sdefl *s, int code, int bitcnt)
+{
+    s->bits |= (code << s->cnt);
+    s->cnt += bitcnt;
+    while (s->cnt >= 8) {
+        *dst++ = (unsigned char)(s->bits & 0xFF);
+        s->bits >>= 8;
+        s->cnt -= 8;
+    } return dst;
+}
+static unsigned char*
+sdefl_match(unsigned char *dst, struct sdefl *s, int dist, int len)
+{
+    static const short lxmin[] = {0,11,19,35,67,131};
+    static const short dxmax[] = {0,6,12,24,48,96,192,384,768,1536,3072,6144,12288,24576};
+    static const short lmin[] = {11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227};
+    static const short dmin[] = {1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,
+        385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577};
+
+    /* length encoding */
+    int lc = len;
+    int lx = sdefl_ilog2(len - 3) - 2;
+    if (!(lx = (lx < 0) ? 0: lx)) lc += 254;
+    else if (len >= 258) lx = 0, lc = 285;
+    else lc = ((lx-1) << 2) + 265 + ((len - lxmin[lx]) >> lx);
+
+    if (lc <= 279)
+        dst = sdefl_put(dst, s, sdefl_mirror[(lc - 256) << 1], 7);
+    else dst = sdefl_put(dst, s, sdefl_mirror[0xc0 - 280 + lc], 8);
+    if (lx) dst = sdefl_put(dst, s, len - lmin[lc - 265], lx);
+
+    /* distance encoding */
+    {int dc = dist - 1;
+    int dx = sdefl_ilog2(sdefl_npow2(dist) >> 2);
+    if ((dx = (dx < 0) ? 0: dx))
+        dc = ((dx + 1) << 1) + (dist > dxmax[dx]);
+    dst = sdefl_put(dst, s, sdefl_mirror[dc << 3], 5);
+    if (dx) dst = sdefl_put(dst, s, dist - dmin[dc], dx);}
+    return dst;
+}
+static unsigned char*
+sdefl_lit(unsigned char *dst, struct sdefl *s, int c)
+{
+    if (c <= 143)
+        return sdefl_put(dst, s, sdefl_mirror[0x30+c], 8);
+    else return sdefl_put(dst, s, 1 + 2 * sdefl_mirror[0x90 - 144 + c], 9);
+}
+static int
+sdefl_compr(struct sdefl *s, unsigned char *out,
+    const unsigned char *in, int in_len, int lvl, unsigned flags)
+{
+    int p = 0;
+    unsigned char *q = out;
+    int max_chain = (lvl < 8) ? (1<<(lvl+1)): (1<<13);
+
+    s->bits = s->cnt = 0;
+    for (p = 0; p < SDEFL_HASH_SIZ; ++p)
+        s->tbl[p] = SDEFL_NIL;
+
+    if (flags & SDEFL_ZLIB_HDR) {
+        q = sdefl_put(q, s, 0x78, 8); /* compr method: deflate, 32k window */
+        q = sdefl_put(q, s, 0x01, 8); /* fast compression */
+    }
+    q = sdefl_put(q, s, 0x01, 1); /* block */
+    q = sdefl_put(q, s, 0x01, 2); /* static huffman */
+
+    p = 0;
+    while (p < in_len) {
+        int run, best_len = 0, dist = 0;
+        int max_match = ((in_len-p)>SDEFL_MAX_MATCH) ? SDEFL_MAX_MATCH:(in_len-p);
+        if (max_match > SDEFL_MIN_MATCH) {
+            int chain_len = max_chain;
+            int limit = ((p-SDEFL_WIN_SIZ)<SDEFL_NIL)?SDEFL_NIL:(p-SDEFL_WIN_SIZ);
+            int i = s->tbl[sdefl_hash32(&in[p])];
+            while (i > limit) {
+                if (in[i+best_len] == in[p+best_len] &&
+                    (sdefl_uload32(&in[i]) == sdefl_uload32(&in[p]))){
+                    int n = SDEFL_MIN_MATCH;
+                    while (n < max_match && in[i+n] == in[p+n]) n++;
+                    if (n > best_len) {
+                        best_len = n;
+                        dist = p - i;
+                        if (n == max_match)
+                            break;
+                    }
+                }
+                if (!(--chain_len)) break;
+                i = s->prv[i&SDEFL_WIN_MSK];
+            }
+        }
+        if (lvl >= 5 && best_len >= SDEFL_MIN_MATCH && best_len < max_match){
+            const int x = p + 1;
+            int chain_len = max_chain;
+            int tar_len = best_len + 1;
+            int limit = ((x-SDEFL_WIN_SIZ)<SDEFL_NIL)?SDEFL_NIL:(x-SDEFL_WIN_SIZ);
+            int i = s->tbl[sdefl_hash32(&in[p])];
+            while (i > limit) {
+                if (in[i+best_len] == in[x+best_len] &&
+                    (sdefl_uload32(&in[i]) == sdefl_uload32(&in[x]))){
+                    int n = SDEFL_MIN_MATCH;
+                    while (n < tar_len && in[i+n] == in[x+n]) n++;
+                    if (n == tar_len) {
+                        best_len = 0;
+                        break;
+                    }
+                }
+                if (!(--chain_len)) break;
+                i = s->prv[i&SDEFL_WIN_MSK];
+            }
+        }
+        if (best_len >= SDEFL_MIN_MATCH) {
+            q = sdefl_match(q, s, dist, best_len);
+            run = best_len;
+        } else {
+            q = sdefl_lit(q, s, in[p]);
+            run = 1;
+        }
+        while (run-- != 0) {
+            unsigned h = sdefl_hash32(&in[p]);
+            s->prv[p&SDEFL_WIN_MSK] = s->tbl[h];
+            s->tbl[h] = p++;
+        }
+    }
+    q = sdefl_put(q, s, 0, 7); /* end of block */
+    if (s->bits) /* flush out all remaining bits */
+        q = sdefl_put(q, s, 0, 8 - s->bits);
+
+    if (flags & SDEFL_ZLIB_HDR) {
+        /* optionally append adler checksum */
+        unsigned a = sdefl_adler32(SDEFL_ADLER_INIT, in, in_len);
+        for (p = 0; p < 4; ++p) {
+            q = sdefl_put(q, s, (a>>24)&0xFF, 8);
+            a <<= 8;
+        }
+    } return (int)(q - out);
+}
+extern int
+sdeflate(struct sdefl *s, unsigned char *out,
+    const unsigned char *in, int in_len, int lvl)
+{
+    return sdefl_compr(s, out, in, in_len, lvl, 0u);
+}
+extern int
+zsdeflate(struct sdefl *s, unsigned char *out,
+    const unsigned char *in, int in_len, int lvl)
+{
+    return sdefl_compr(s, out, in, in_len, lvl, SDEFL_ZLIB_HDR);
+}
+extern int
+sdefl_bound(int len)
+{
+    int a = 128 + (len * 110) / 100;
+    int b = 128 + len + ((len / (31 * 1024)) + 1) * 5;
+    return (a > b) ? a : b;
+}
+
+/*
+------------------------------------------------------------------------------
+sdefl software is available under 2 licenses -- choose whichever you prefer.
+------------------------------------------------------------------------------
+ALTERNATIVE A - MIT License
+Copyright (c) 2020 Micha Mettke
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+------------------------------------------------------------------------------
+ALTERNATIVE B - Public Domain (www.unlicense.org)
+This is free and unencumbered software released into the public domain.
+Anyone is free to copy, modify, publish, use, compile, sell, or distribute this
+software, either in source code form or as a compiled binary, for any purpose,
+commercial or non-commercial, and by any means.
+In jurisdictions that recognize copyright laws, the author or authors of this
+software dedicate any and all copyright interest in the software to the public
+domain. We make this dedication for the benefit of the public at large and to
+the detriment of our heirs and successors. We intend this dedication to be an
+overt act of relinquishment in perpetuity of all present and future rights to
+this software under copyright law.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+------------------------------------------------------------------------------
+*/
 
 #endif  // RPNG_IMPLEMENTATION
