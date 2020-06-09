@@ -52,6 +52,7 @@ Mkfile.old
 dkms.conf
 
 # Ignore files build by Visual Studio
+[Dd]ebug
 *.obj
 *.pdb
 *.aps
