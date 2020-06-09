@@ -483,6 +483,8 @@ void rpng_create_image(const char *filename, const char *data, int width, int he
     unsigned char *comp_data = (unsigned char *)RPNG_CALLOC(bounds, 1);
     int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_size_filtered, 8);   // Compression level 8, same as stbwi
     RPNG_FREE(sde);
+    
+    printf("Data size: %i -> Comp data size: %i\n", data_size_filtered, comp_data_size);
 
     // Security check to verify compression worked
     if (comp_data_size > 0)
@@ -1495,7 +1497,7 @@ sdefl_compr(struct sdefl *s, unsigned char *out,
 
     if (flags & SDEFL_ZLIB_HDR) {
         q = sdefl_put(q, s, 0x78, 8); /* compr method: deflate, 32k window */
-        q = sdefl_put(q, s, 0x01, 8); /* fast compression */
+        q = sdefl_put(q, s, 0x5e, 8); /* default compression */
     }
     q = sdefl_put(q, s, 0x01, 1); /* block */
     q = sdefl_put(q, s, 0x01, 2); /* static huffman */
@@ -1558,8 +1560,8 @@ sdefl_compr(struct sdefl *s, unsigned char *out,
         }
     }
     q = sdefl_put(q, s, 0, 7); /* end of block */
-    if (s->bits) /* flush out all remaining bits */
-        q = sdefl_put(q, s, 0, 8 - s->bits);
+    if (s->cnt) /* flush out all remaining bits */
+        q = sdefl_put(q, s, 0, 8 - s->cnt);
 
     if (flags & SDEFL_ZLIB_HDR) {
         /* optionally append adler checksum */
