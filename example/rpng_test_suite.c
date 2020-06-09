@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     int height = 128;
     char *data = RPNG_MALLOC(width*height*3);
     double l = hypot(width, height);
-    
+
     for (int y = 0; y < height; y++)
     {
         for (int x = 0; x < width; x++)
@@ -38,29 +38,29 @@ int main(int argc, char *argv[])
         }
     }
     
-    Image image = { data, 128, 128, 1, UNCOMPRESSED_R8G8B8 };
+    Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8 };
     ExportImage(image, "test_pixels_raylib.png");
-    rpng_create_image("test_pixels_rpng.png", data, 128, 128, 8, 3);
+    rpng_create_image("test_pixels_rpng.png", data, width, height, 8, 3);
 #else
     // TEST: Create a red pixels image 4x4, RGB
-    int width = 4;
-    int height = 4;
-    char *data = RPNG_MALLOC(width*height*3);
+    int width = 16;
+    int height = 16;
+    char *data = RPNG_MALLOC(width*height*4);
 
     for (int y = 0; y < height; y++)
     {
         for (int x = 0; x < width; x++)
         {
-            data[(y*width + x)*3] = 0xff;
-            data[(y*width + x)*3 + 1] = 0x00;
-            data[(y*width + x)*3 + 2] = 0x00;
-            //data[(y*width + x)*3 + 3] = 0xff;
+            data[(y*width + x)*4] = 0xff;
+            data[(y*width + x)*4 + 1] = 0x00;
+            data[(y*width + x)*4 + 2] = 0xff;
+            data[(y*width + x)*4 + 3] = 0xff;
         }
     }
     
-    Image image = { data, 4, 4, 1, UNCOMPRESSED_R8G8B8 };
+    Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8A8 };
     ExportImage(image, "red_pixels_raylib.png");
-    rpng_create_image("red_pixels_rpng.png", data, 4, 4, 8, 3);
+    rpng_create_image("red_pixels_rpng.png", data, width, height, 8, 4);
 #endif
 
     if (argc > 1)
