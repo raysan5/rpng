@@ -1,17 +1,20 @@
 ![](logo/rpng_256x256.png)
 
-**rpng** is a simple and easy-to-use library to manage png chunks
+**rpng** is a simple and easy-to-use library to manage png chunks.
 
 ## features
 
  - Count/read/write/remove png chunks
  - Chunks data abstraction (`png_chunk` type)
- - Chunk types provided for convenience
- - Operates on file or file-buffer
+ - Create png file from raw pixel data
+ - Operates on file or memory-buffer
  - Minimal `libc` usage and `RPNG_NO_STDIO` supported
  
 ## rpng basic file API
 ```c
+// Create a PNG file from image data (IHDR, IDAT, IEND)
+void rpng_create_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
+
 int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
 rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);    // Read one chunk type
 rpng_chunk *rpng_chunk_read_all(const char *filename, int *count);           // Read all chunks
