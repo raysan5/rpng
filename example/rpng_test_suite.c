@@ -39,11 +39,11 @@ int main(int argc, char *argv[])
     }
     
     //Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8 };
-    //ExportImage(image, "test_pixels_raylib.png");
-    rpng_create_image("test_pixels_rpng.png", data, width, height, 8, 3);
+    //ExportImage(image, "resources/colors_stbwi.png");
+    rpng_create_image("resources/colors_rpng.png", data, width, height, 8, 3);
     RPNG_FREE(data);
 #else
-    // TEST: Create a red pixels image 4x4, RGB
+    // TEST: Create a pixels image 16x16, RGBA
     int width = 16;
     int height = 16;
     char *data = RPNG_MALLOC(width*height*4);
@@ -60,8 +60,8 @@ int main(int argc, char *argv[])
     }
     
     //Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8A8 };
-    //ExportImage(image, "red_pixels_raylib.png");
-    rpng_create_image("red_pixels_rpng.png", data, width, height, 8, 4);
+    //ExportImage(image, "resources/pixels_stbwi.png");
+    rpng_create_image("resources/pixels_rpng.png", data, width, height, 8, 4);
     RPNG_FREE(data);
 #endif
 
