@@ -14,9 +14,9 @@
 
 #include <stdio.h>      // Required for: printf()
 
-#include <math.h>
+#include <math.h>       // Required for: colors image generation
 
-#include "raylib.h"     // Just used for stbiw testing (ExportImage())
+//#include "raylib.h"     // Just used for stbiw testing (ExportImage())
 
 int main(int argc, char *argv[])
 {
@@ -38,9 +38,10 @@ int main(int argc, char *argv[])
         }
     }
     
-    Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8 };
-    ExportImage(image, "test_pixels_raylib.png");
+    //Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8 };
+    //ExportImage(image, "test_pixels_raylib.png");
     rpng_create_image("test_pixels_rpng.png", data, width, height, 8, 3);
+    RPNG_FREE(data);
 #else
     // TEST: Create a red pixels image 4x4, RGB
     int width = 16;
@@ -58,9 +59,10 @@ int main(int argc, char *argv[])
         }
     }
     
-    Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8A8 };
-    ExportImage(image, "red_pixels_raylib.png");
+    //Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8A8 };
+    //ExportImage(image, "red_pixels_raylib.png");
     rpng_create_image("red_pixels_rpng.png", data, width, height, 8, 4);
+    RPNG_FREE(data);
 #endif
 
     if (argc > 1)
