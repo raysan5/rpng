@@ -1576,8 +1576,8 @@ sdefl_compr(struct sdefl *s, unsigned char *out,
         s->tbl[p] = SDEFL_NIL;
 
     if (flags & SDEFL_ZLIB_HDR) {
-        q = sdefl_put(q, s, 0x78, 8); /* compr method: deflate, 32k window */
-        q = sdefl_put(q, s, 0x5e, 8); /* default compression */
+        q = sdefl_put(q, s, 0x78, 8); /* compression method: deflate, 32k window */
+        q = sdefl_put(q, s, 0xda, 8); /* maximum compression */
     }
     q = sdefl_put(q, s, 0x01, 1); /* block */
     q = sdefl_put(q, s, 0x01, 2); /* static huffman */
