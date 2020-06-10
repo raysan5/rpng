@@ -436,6 +436,26 @@ static void save_file_from_buffer(const char *filename, void *data, int bytesToW
 // Module Functions Definition
 //----------------------------------------------------------------------------------
 
+// The Paeth filter function computes a simple linear function of the three neighbouring pixels (left, above, upper left), 
+// then chooses as predictor the neighbouring pixel closest to the computed value. Ref: https://www.w3.org/TR/PNG/#9Filters
+// The algorithm used in this International Standard is an adaptation of the technique due to Alan W. Paeth.
+// NOTE: Paeth predictor calculations shall be performed exactly, without overflow.
+static unsigned char rpng_paeth_predictor(int a, int b, int c)
+{
+    unsigned char pr = 0;
+    
+    int p = a + b - c;
+    int pa = abs(p - a);
+    int pb = abs(p - b);
+    int pc = abs(p - c);
+   
+    if ((pa <= pb) && (pa <= pc)) pr = (unsigned char)a;
+    else if (pb <= pc) pr = (unsigned char)b;
+    else pr = (unsigned char)c;
+    
+    return pr;
+}
+
 // Create basic PNG from image data (IHDR, IDAT, IEND)
 //  - Bit depth defines every color channel size, supported values: 8, 16
 //  - Color channels defines pixel channels, supported values: 1, 2, 3, 4
@@ -458,26 +478,86 @@ void rpng_create_image(const char *filename, const char *data, int width, int he
     image_info.bit_depth = (unsigned char)bit_depth;
     image_info.color_type = (unsigned char)color_type;
     
-    //unsigned int data_size = width*height*color_channels*(bit_depth/8);
-    
-    //https://stackoverflow.com/questions/9050260/what-does-a-zlib-header-look-like
-    //https://tools.ietf.org/html/rfc1950
-    //https://www.w3.org/TR/PNG-Encoders.html#E.Filter-selection
-    
-    // Image pre-processing to append filter type byte to every scanline
-    // For the moment just adding filter type 0 (None) just to test
-    char filter_type = 0;
-    int scanline_size = width*color_channels*(bit_depth/8);
+    // Image data pre-processing to append filter type byte to every scanline
+    int pixel_size = color_channels*(bit_depth/8);
+    int scanline_size = width*pixel_size;
     unsigned int data_size_filtered = (scanline_size + 1)*height;   // Adding 1 byte per scanline filter
     unsigned char *data_filtered = (unsigned char *)RPNG_CALLOC(data_size_filtered, 1);
     
+    int out = 0, x = 0, a = 0, b = 0, c = 0;
+    int sum_value[5] = { 0 };
+    int best_filter = 0;
+    
     for (int y = 0; y < height; y++)
     {
-        data_filtered[(scanline_size + 1)*y] = filter_type;
-        memcpy(data_filtered + (scanline_size + 1)*y + 1, data + scanline_size*y, scanline_size);
+        // Choose the best filter type for every scanline
+        // REF: https://www.w3.org/TR/PNG-Encoders.html#E.Filter-selection
+        for (int p = 0; p < scanline_size; p++)
+        {
+            x = (int)((unsigned char *)data)[scanline_size*y + p];
+            a = (int)((unsigned char *)data)[scanline_size*y + p - ((p > pixel_size)? pixel_size : 0)];
+            b = (y > 0)? (int)((unsigned char *)data)[scanline_size*(y - 1) + p] : 0;
+            c = (y > 0)? (int)((unsigned char *)data)[scanline_size*(y - 1) + p - ((p > pixel_size)? pixel_size : 0)] : 0;
+            
+            // Heuristic: Compute the output scanline using all five filters
+            // REF: https://www.w3.org/TR/PNG/#9Filters
+            for (int filter = 0; filter < 5; filter++)
+            {
+                switch(filter)
+                {
+                    case 0: out = x; break;
+                    case 1: out = x - a; break;
+                    case 2: out = x - b; break;
+                    case 3: out = x - ((a + b)>>1); break;
+                    case 4: out = x - rpng_paeth_predictor(a, b, c); break;
+                    default: break;
+                }
+            
+                sum_value[filter] += abs((signed char)out);
+            }
+        }
+        
+        // Select the filter that gives the smallest sum of absolute values of outputs. 
+        // NOTE: Considering the output bytes as signed differences for the test.
+        best_filter = 0;
+        int best_value = sum_value[0];
+
+        for (int filter = 1; filter < 5; filter++)
+        {
+            if (sum_value[filter] < best_value)
+            {
+                best_value = sum_value[filter];
+                best_filter = filter;
+            }
+        }
+
+        // Register scanline filter byte
+        data_filtered[(scanline_size + 1)*y] = best_filter;
+        
+        // Apply the best_filter to scanline
+        for (int p = 0; p < scanline_size; p++)
+        {
+            x = (int)((unsigned char *)data)[scanline_size*y + p];
+            a = (int)((unsigned char *)data)[scanline_size*y + p - ((p > pixel_size)? pixel_size : 0)];
+            b = (y > 0)? (int)((unsigned char *)data)[scanline_size*(y - 1) + p] : 0;
+            c = (y > 0)? (int)((unsigned char *)data)[scanline_size*(y - 1) + p - ((p > pixel_size)? pixel_size : 0)] : 0;
+            
+            switch(best_filter)
+            {
+                case 0: out = x; break;
+                case 1: out = x - a; break;
+                case 2: out = x - b; break;
+                case 3: out = x - ((a + b)>>1); break;
+                case 4: out = x - rpng_paeth_predictor(a, b, c); break;
+                default: break;
+            }
+            
+            // Register scanline filtered values, byte by byte
+            data_filtered[(scanline_size + 1)*y + 1 + p] = (unsigned char)out;
+        }
     }
 
-    // TODO: ISSUE: When opening image with TweakPNG (that uses libpng), there is an error on zlib stream: [libpng] Not enough image data
+    // Compress filtered image data and generate a valid zlib stream
     struct sdefl *sde = RPNG_CALLOC(sizeof(struct sdefl), 1);
     int bounds = sdefl_bound(data_size_filtered);
     unsigned char *comp_data = (unsigned char *)RPNG_CALLOC(bounds, 1);
