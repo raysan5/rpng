@@ -162,15 +162,11 @@ extern "C" {            // Prevents name mangling of functions
 // Module Functions Declaration
 //----------------------------------------------------------------------------------
 
-// Create basic PNG from image data (IHDR, IDAT, IEND)
-//  - Bit depth defines every color channel size, supported values: 8, 16
-//  - Format defines pixel channels, supported values: 
-//      0  Grayscale (1 channel), 
-//      2  RGB (3 channels)
-//      4  Gray + Alpha (2 channels)
-//      6  RGBA (4 channels)
-// NOTE: It's up to the user to provide the right data format for image creation, data is compressed with DEFLATE algorythm
-RPNGAPI void rpng_create_image(const char *filename, const char *data, int width, int height, int bit_depth, int format);
+// Create a PNG file from image data (IHDR, IDAT, IEND)
+//  - Color channels defines pixel color channels, supported values: 1 (GRAY), 2 (GRAY+ALPHA), 3 (RGB), 4 (RGBA)
+//  - Bit depth defines every color channel size, supported values: 8 bit, 16 bit
+// NOTE: It's up to the user to provide the right data format as specified by color_channels and bit_depth
+RPNGAPI void rpng_create_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
 
 // Read and write chunks from file
 RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
@@ -456,11 +452,11 @@ static unsigned char rpng_paeth_predictor(int a, int b, int c)
     return pr;
 }
 
-// Create basic PNG from image data (IHDR, IDAT, IEND)
-//  - Bit depth defines every color channel size, supported values: 8, 16
-//  - Color channels defines pixel channels, supported values: 1, 2, 3, 4
-// NOTE: It's up to the user to provide the right data format for image creation, data is compressed with DEFLATE algorythm
-void rpng_create_image(const char *filename, const char *data, int width, int height, int bit_depth, int color_channels)
+// Create a PNG file from image data (IHDR, IDAT, IEND)
+//  - Color channels defines pixel color channels, supported values: 1 (GRAY), 2 (GRAY+ALPHA), 3 (RGB), 4 (RGBA)
+//  - Bit depth defines every color channel size, supported values: 8 bit, 16 bit
+// NOTE: It's up to the user to provide the right data format as specified by color_channels and bit_depth
+void rpng_create_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth)
 {
     if ((bit_depth != 8) && (bit_depth != 16)) return;  // Bit depth not supported
 
