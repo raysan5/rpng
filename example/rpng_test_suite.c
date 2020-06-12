@@ -16,63 +16,17 @@
 
 #include <math.h>       // Required for: colors image generation
 
-//#include "raylib.h"     // Just used for stbiw testing (ExportImage())
 
 int main(int argc, char *argv[])
 {
-#if 1
-    // TEST: Create a colorful image: 128x128, RGB
-    int width = 128;
-    int height = 128;
-    char *data = RPNG_MALLOC(width*height*3);
-    double l = hypot(width, height);
-
-    for (int y = 0; y < height; y++)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            data[(y*width + x)*3] = floor(255*hypot(0 - x, height - y)/l);
-            data[(y*width + x)*3 + 1] = floor(255*hypot(width - x, height - y)/l);
-            data[(y*width + x)*3 + 2] = floor(255*hypot(width - x, 0 - y)/l);
-            //data[(y*width + x)*3] = 255;
-        }
-    }
-    
-    //Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8 };
-    //ExportImage(image, "resources/colors_stbwi.png");
-    rpng_create_image("resources/colors_rpng.png", data, width, height, 8, 3);
-    RPNG_FREE(data);
-#else
-    // TEST: Create a pixels image 16x16, RGBA
-    int width = 16;
-    int height = 16;
-    char *data = RPNG_MALLOC(width*height*4);
-
-    for (int y = 0; y < height; y++)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            data[(y*width + x)*4] = 0xff;
-            data[(y*width + x)*4 + 1] = 0x00;
-            data[(y*width + x)*4 + 2] = 0xff;
-            data[(y*width + x)*4 + 3] = 0xff;
-        }
-    }
-    
-    //Image image = { data, width, height, 1, UNCOMPRESSED_R8G8B8A8 };
-    //ExportImage(image, "resources/pixels_stbwi.png");
-    rpng_create_image("resources/pixels_rpng.png", data, width, height, 8, 4);
-    RPNG_FREE(data);
-#endif
-
     if (argc > 1)
     {
-        // TEST: Chunk count and print chunk info
+        // TEST: Count and print chunk info
         printf("Chunks count: %i\n\n", rpng_chunk_count(argv[1]));
 
         rpng_chunk_print_info(argv[1]);
 
-        // TEST: Chunk reading (all)
+        // TEST: Read all chunks
         int count = 0;
         rpng_chunk *chunks = rpng_chunk_read_all(argv[1], &count);
         
@@ -92,7 +46,7 @@ int main(int argc, char *argv[])
         for (int i = 0; i < count; i++) RPNG_FREE(chunks[i].data);
         RPNG_FREE(chunks);
 
-        // TEST: Write a chunk - rPNG
+        // TEST: Write a custom chunk - rPNG
         rpng_chunk chunk = { 0 };
         chunk.length = 20;              // Data length
         memcpy(chunk.type, "rPNG", 4);  // Chunck type FOURCC
@@ -109,7 +63,7 @@ int main(int argc, char *argv[])
         
         rpng_chunk_print_info(argv[1]);
 
-        // TEST: Chunk reading
+        // TEST: Read a custom chunk
         rpng_chunk rchunk = rpng_chunk_read(argv[1], "rPNG");
 
         printf("\n");
@@ -122,7 +76,7 @@ int main(int argc, char *argv[])
 
         RPNG_FREE(chunk.data);
 
-        // TEST: Chunk removing
+        // TEST: Remove chunks
         rpng_chunk_remove(argv[1], "rPNG");
         rpng_chunk_remove(argv[1], "tEXt");
         
@@ -142,6 +96,47 @@ int main(int argc, char *argv[])
         rpng_chunk_print_info(argv[1]);
     }
     else printf("WARNING: No input file provided.\n");
+
+#if 0
+    // TEST: Create a colorful image: 128x128, RGB
+    int width = 128;
+    int height = 128;
+    char *data = RPNG_MALLOC(width*height*3);
+    double l = hypot(width, height);
+
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            data[(y*width + x)*3] = floor(255*hypot(0 - x, height - y)/l);
+            data[(y*width + x)*3 + 1] = floor(255*hypot(width - x, height - y)/l);
+            data[(y*width + x)*3 + 2] = floor(255*hypot(width - x, 0 - y)/l);
+        }
+    }
+
+    rpng_create_image("resources/colors_rpng.png", data, width, height, 8, 3);
+    RPNG_FREE(data);
+#endif
+#if 0
+    // TEST: Create a pixels image 16x16, RGBA
+    int width = 16;
+    int height = 16;
+    char *data = RPNG_MALLOC(width*height*4);
+
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            data[(y*width + x)*4] = 0xff;
+            data[(y*width + x)*4 + 1] = 0x00;
+            data[(y*width + x)*4 + 2] = 0xff;
+            data[(y*width + x)*4 + 3] = 0xff;
+        }
+    }
+
+    rpng_create_image("resources/pixels_rpng.png", data, width, height, 8, 4);
+    RPNG_FREE(data);
+#endif
 
     return 0;
 }
