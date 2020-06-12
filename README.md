@@ -39,8 +39,9 @@ rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);       
 ```c
 rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type);  // Read one chunk type from memory
 ```
-Noote an important detail: memory function does not receive the size of the buffer. It was a design decision.
+Note an important detail: memory function does not receive the size of the buffer. It was a design decision.
 It is expected that user provides valid data... but data is validated following PNG specs (png magic number, chunks data, IEND closing chunk).
+Memory functions that require writting data, return the output buffer size as a parameter: `int *output_size` and are limited in size by `RPNG_MAX_OUTPUT_SIZE` definition, by default 32MB.
 
 ## usage example
 There is a complete example [here](https://github.com/raysan5/rpng/blob/master/example/rpng_test_suite.c).
