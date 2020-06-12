@@ -39,8 +39,8 @@ rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);       
 ```c
 rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type);  // Read one chunk type from memory
 ```
-Here you can note an important detail, memory function does not receive the size of the buffer. It was a design decision.
-It is expected that user provides valid data and data is validated following PNG specs (png magic number, chunks data, IEND closing chunk).
+Noote an important detail: memory function does not receive the size of the buffer. It was a design decision.
+It is expected that user provides valid data... but data is validated following PNG specs (png magic number, chunks data, IEND closing chunk).
 
 ## usage example
 There is a complete example [here](https://github.com/raysan5/rpng/blob/master/example/rpng_test_suite.c).
