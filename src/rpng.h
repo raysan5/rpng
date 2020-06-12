@@ -186,10 +186,10 @@ RPNGAPI void rpng_chunk_write_physical_size(const char *filename, int pixels_uni
 RPNGAPI void rpng_chunk_write_chroma(const char *filename, float white_x, float white_y, float red_x, float red_y, float green_x, float green_y, float blue_x, float blue_y); // Write cHRM chunk
 
 // Read and write chunks from memory buffer
-RPNGAPI int rpng_chunk_count_from_memory(const char *buffer);                                             // Count the chunks in a PNG image on memory
-RPNGAPI rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type);               // Read one chunk type on memory
-RPNGAPI rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count);                      // Read all chunks on memory
-RPNGAPI char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, int *output_size);          // Remove one chunk type on memory
+RPNGAPI int rpng_chunk_count_from_memory(const char *buffer);                                             // Count the chunks in a PNG image from memory
+RPNGAPI rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type);               // Read one chunk type from memory
+RPNGAPI rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count);                      // Read all chunks from memory
+RPNGAPI char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, int *output_size);          // Remove one chunk type from memory
 RPNGAPI char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_size);                        // Remove all chunks except: IHDR-IDAT-IEND
 RPNGAPI char *rpng_chunk_write_from_memory(const char *buffer, rpng_chunk chunk, int *output_size);                 // Write one new chunk after IHDR (any kind)
 RPNGAPI char *rpng_chunk_write_text_from_memory(const char *buffer, char *keyword, char *text, int *output_size);   // Write one new tEXt chunk
@@ -795,13 +795,13 @@ bool rpng_chunk_check_all_valid(const char *filename)
     rpng_chunk *chunks = rpng_chunk_read_all(filename, &count);
     
     unsigned int crc = 0;
-    char *crc_data = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
+    char *chunk_type_data = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
     
     for (int i = 0; i < count; i++)
     {
-        memcpy(crc_data, chunks[i].type, 4);
-        memcpy(crc_data + 4, chunks[i].data, chunks[i].length);
-        crc = compute_crc32((unsigned char *)crc_data, 4 + chunks[i].length);
+        memcpy(chunk_type_data, chunks[i].type, 4);
+        memcpy(chunk_type_data + 4, chunks[i].data, chunks[i].length);
+        crc = compute_crc32((unsigned char *)chunk_type_data, 4 + chunks[i].length);
         crc = swap_endian(crc);
         
         // Check computed CRC matches provided CRC
@@ -868,17 +868,15 @@ int rpng_chunk_count_from_memory(const char *buffer)
         unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
         buffer_ptr += 4;
 
-        while (memcmp(buffer_ptr, "IEND", 4) != 0) // While IEND chunk not reached
+        while (memcmp(buffer_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
         {
-            //printf("Chunk: %c%c%c%c [%i bytes]\n", ((char *)buffer_ptr)[0], ((char *)buffer_ptr)[1], ((char *)buffer_ptr)[2], ((char *)buffer_ptr)[3], chunk_size);
-            buffer_ptr += (4 + chunk_size + 4);   // Skip chunk type FOURCC + chunk data + CRC32
+            buffer_ptr += (4 + 4 + chunk_size + 4);    // Skip chunk type FOURCC + chunk data + CRC32
 
             chunk_size = swap_endian(((int *)buffer_ptr)[0]);
             buffer_ptr += 4;  // Skip chunk file_size
             count++;
         }
 
-        //printf("Chunk: %c%c%c%c [%i bytes]\n", ((char *)buffer_ptr)[0], ((char *)buffer_ptr)[1], ((char *)buffer_ptr)[2], ((char *)buffer_ptr)[3], chunk_size);
         count++; // IEND chunk!
     }
 
@@ -948,7 +946,6 @@ rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count)
             chunk_size = swap_endian(((int *)buffer_ptr)[0]);
 
             counter++;
-
             if (counter >= (RPNG_MAX_CHUNKS_COUNT - 2)) break;   // WARNING: Too many chunks!
         }
 
