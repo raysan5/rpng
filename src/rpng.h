@@ -180,10 +180,16 @@ RPNGAPI void rpng_chunk_write(const char *filename, rpng_chunk data);           
 RPNGAPI void rpng_chunk_write_text(const char *filename, char *keyword, char *text);        // Write tEXt chunk
 RPNGAPI void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text);   // Write zTXt chunk, DEFLATE compressed text
 RPNGAPI void rpng_chunk_write_gamma(const char *filename, float gamma);                     // Write gAMA chunk (stored as int, gamma*100000)
-RPNGAPI void rpng_chunk_write_srgb(const char *filename, int srgb_type);                    // Write sRGB chunk, requires gAMA chunk
+RPNGAPI void rpng_chunk_write_srgb(const char *filename, char srgb_type);                   // Write sRGB chunk, requires gAMA chunk
 RPNGAPI void rpng_chunk_write_time(const char *filename, short year, char month, char day, char hour, char min, char sec);  // Write tIME chunk
 RPNGAPI void rpng_chunk_write_physical_size(const char *filename, int pixels_unit_x, int pixels_unit_y, bool meters);       // Write pHYs chunk
 RPNGAPI void rpng_chunk_write_chroma(const char *filename, float white_x, float white_y, float red_x, float red_y, float green_x, float green_y, float blue_x, float blue_y); // Write cHRM chunk
+
+// Chunk utilities
+RPNGAPI void rpng_chunk_print_info(const char *filename);                            // Output info about the chunks
+RPNGAPI bool rpng_chunk_check_all_valid(const char *filename);                       // Check chunks CRC is valid
+RPNGAPI void rpng_chunk_combine_image_data(const char *filename);                    // Combine multiple IDAT chunks into a single one
+RPNGAPI void rpng_chunk_split_image_data(const char *filename, int split_size);      // Split one IDAT chunk into multiple ones
 
 // Read and write chunks from memory buffer
 RPNGAPI int rpng_chunk_count_from_memory(const char *buffer);                                             // Count the chunks in a PNG image from memory
@@ -193,14 +199,8 @@ RPNGAPI char *rpng_chunk_remove_from_memory(const char *buffer, const char *chun
 RPNGAPI char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_size);                        // Remove all chunks except: IHDR-IDAT-IEND
 RPNGAPI char *rpng_chunk_write_from_memory(const char *buffer, rpng_chunk chunk, int *output_size);                 // Write one new chunk after IHDR (any kind)
 RPNGAPI char *rpng_chunk_write_text_from_memory(const char *buffer, char *keyword, char *text, int *output_size);   // Write one new tEXt chunk
-
-// Chunk utilities
-RPNGAPI void rpng_chunk_print_info(const char *filename);                            // Output info about the chunks
-RPNGAPI bool rpng_chunk_check_all_valid(const char *filename);                       // Check chunks CRC is valid
-RPNGAPI void rpng_chunk_combine_image_data(const char *filename);                    // Combine multiple IDAT chunks into a single one
-RPNGAPI void rpng_chunk_split_image_data(const char *filename, int split_size);      // Split one IDAT chunk into multiple ones
-RPNGAPI char *rpng_chunk_combine_image_data_from_memory(char *buffer, int *output_size);                        // Combine multiple IDAT chunks into a single one
-RPNGAPI char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_size, int *output_size);          // Split one IDAT chunk into multiple ones
+RPNGAPI char *rpng_chunk_combine_image_data_from_memory(char *buffer, int *output_size);                            // Combine multiple IDAT chunks into a single one
+RPNGAPI char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_size, int *output_size);              // Split one IDAT chunk into multiple ones
 
 #ifdef __cplusplus
 }
@@ -217,23 +217,23 @@ RPNGAPI char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_si
 #if defined(RPNG_IMPLEMENTATION)
 
 #if !defined(RPNG_NO_STDIO)
-#include <stdio.h>      // Required for: FILE, fopen(), fread(), fwrite(), fclose()
+    #include <stdio.h>      // Required for: FILE, fopen(), fread(), fwrite(), fclose()
 #endif
 
 #include <stdlib.h>         // Required for: malloc(), calloc(), free()
 #include <string.h>         // Required for: memcmp(), memcpy()
 
-//#include "miniz.h"
-
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
 
+// NOTE: Some chunks strutures are defined for convenience,
+// but only the ones that can be directly serialized to chunk.dataa
+
 // Critical chunks (IHDR, PLTE, IDAT, IEND)
 //------------------------------------------------------------------------
-
-// Image header 
-// Mandatory chunck: image info (13 bytes)
+// IHDR: Image header 
+// Mandatory chunk: image info (13 bytes)
 typedef struct {
     unsigned int width;         // Image width
     unsigned int height;        // Image width
@@ -245,49 +245,33 @@ typedef struct {
     // WARNING: 3 bytes of padding required for proper alignment!!!
 } rpng_chunk_IHDR;
 
-// Palette
+// PLTE: Palette
 // Contains from 1 to 256 palette entries, each a three-byte series (RGB)
 // Chunk must appear for color type 3, and can appear for color types 2 and 6; it must not appear for color types 0 and 4. 
 // If this chunk does appear, it must precede the first IDAT chunk. There must not be more than one PLTE chunk
-typedef struct {
-    struct {
-        unsigned char r;
-        unsigned char g;
-        unsigned char b;
-    } *palette;                 // Palette color values
-} rpng_chunk_PLTE;
 
-// Image data
+// IDAT: Image data
 // There can be multiple IDAT chunks; if so, they must appear consecutively with no other intervening chunks
-typedef struct {
-    unsigned char *data;        // Pixel data, output datastream of the compression algorithm
-} rpng_chunk_IDAT;
 
-// Image trailer
+// IEND: Image ending trailer
 // rpng_chunk_IEND > rpng_chunk (empty), it should be LAST
 
 // Transparency information
 //------------------------------------------------------------------------
-// Transparency
+// tRNS: Transparency
 // For color type 3 (indexed color), the tRNS chunk contains a series of one-byte alpha values, corresponding to entries in the PLTE chunk.
 // For color type 0 (grayscale), the tRNS chunk contains a single gray level value, stored in the format: Gray (2 bytes), range 0 .. (2^bitdepth)-1
 // For color type 2 (truecolor), the tRNS chunk contains a single RGB color value, stored in the format: Red-Green-Blue (2 bytes each), range 0 .. (2^bitdepth)-1
 // tRNS is prohibited for color types 4 and 6, since a full alpha channel is already present in those cases.
 // When present, the tRNS chunk must precede the first IDAT chunk, and must follow the PLTE chunk, if any.
-typedef struct {
-    unsigned char *data;        // Transparency values
-} rpng_chunk_tRNS;
 
 // Color space information
 //------------------------------------------------------------------------
-// Image gamma
+// gAMA: Image gamma
 // Specifies the relationship between the image samples and the desired display output intensity as a power function: sample = light_out^gamma
 // Sample and light_out are normalized to the range 0.0 (minimum intensity) to 1.0 (maximum intensity). Therefore: sample = integer_sample/(2^bitdepth - 1)
-typedef struct {
-    unsigned int gamma;         // Gamma times 100000 (i.e. Gamma of 1/2.2 would be stored as 45455)
-} rpng_chunk_gAMA;
 
-// Primary chromaticities
+// cHRM: Primary chromaticities
 // NOTE: Values multiplied by 100000 (i.e. Value 0.3127 would be stored as the integer 31270)
 typedef struct {
     unsigned int white_point_x;
@@ -300,79 +284,64 @@ typedef struct {
     unsigned int bluey;
 } rpng_chunk_cHRM;
 
-// Standard RGB color space
+// sRGB: Standard RGB color space
 // When using sRGB chunk, gAMA should also be present (and perhaps a cHRM chunk)
 typedef struct {
-    unsigned char flag;         // 0: Perceptual, 1: Relative colorimetric, 2: Saturation, 3: Absolute colorimetric
+    unsigned char flag;             // 0: Perceptual, 1: Relative colorimetric, 2: Saturation, 3: Absolute colorimetric
 } rpng_chunk_sRGB;
 
-// Embedded ICC profile
-typedef struct {
-    unsigned char *profile;     // Profile name: 1-80 bytes (must end with NULL separator: /0)
-    unsigned char comp;         // Compression method (0 for DEFLATE)
-    unsigned char *comp_profile; // Compressed profile: n bytes
-} rpng_chunk_iCCP;
+// iCCP: Embedded ICC profile
+//   unsigned char *profile;        // Profile name: 1-80 bytes (must end with NULL separator: /0)
+//   unsigned char comp;            // Compression method (0 for DEFLATE)
+//   unsigned char *comp_profile;   // Compressed profile: n bytes
 
 // Textual information
 //------------------------------------------------------------------------
-// Textual data
-typedef struct {
-    unsigned int keyword_length;
-    unsigned int text_length;
-    unsigned char *keyword;     // Keyword: 1-80 bytes (must end with NULL separator: /0)
-    unsigned char *text;        // Text: n bytes (character string, no NULL terminated required)
-} rpng_chunk_tEXt;
+// tEXt: Textual data
+//   unsigned char *keyword;        // Keyword: 1-80 bytes (must end with NULL separator: /0)
+//   unsigned char *text;           // Text: n bytes (character string, no NULL terminated required)
 
-// Compressed textual data
-typedef struct {
-    unsigned int keyword_length;
-    unsigned int comp_text_length;
-    unsigned char comp;         // Compression method (0 for DEFLATE)
-    unsigned char *keyword;     // Keyword: 1-80 bytes (must end with NULL separator: /0)
-    unsigned char *comp_text;   // Compressed text: n bytes
-} rpng_chunk_zTXt;
+// zTXt: Compressed text data
+//   unsigned char *keyword;        // Keyword: 1-80 bytes (must end with NULL separator: /0)
+//   unsigned char comp;            // Compression method (0 for DEFLATE)
+//   unsigned char *text;           // UTF-8 text (0 or more bytes)
 
-// International textual data
-typedef struct {
-    unsigned int keyword_length;
-    unsigned int text_length;
-    unsigned char comp_flag;    // Compression flag (0 for uncompressed text, 1 for compressed text)
-    unsigned char comp;         // Compression method (0 for DEFLATE)
-    unsigned char *keyword;     // Keyword: 1-80 bytes (must end with NULL separator: /0)
-    unsigned char *lang_tag;    // Language tag (0 or more bytes, must end with NULL separator: /0)
-    unsigned char *tr_keyword;  // Translated keyword (0 or more bytes, must end with NULL separator: /0)
-    unsigned char *text;        // UTF-8 text (0 or more bytes)
-} rpng_chunk_iTXt;
+// iTXt: International textual data
+//   unsigned char *keyword;        // Keyword: 1-80 bytes (must end with NULL separator: /0)
+//   unsigned char comp_flag;       // Compression flag (0 for uncompressed text, 1 for compressed text)
+//   unsigned char comp;            // Compression method (0 for DEFLATE)
+//   unsigned char *lang_tag;       // Language tag (0 or more bytes, must end with NULL separator: /0)
+//   unsigned char *tr_keyword;     // Translated keyword (0 or more bytes, must end with NULL separator: /0)
+//   unsigned char *text;           // UTF-8 text (0 or more bytes)
 
-//Miscellaneous information
+
+// Miscellaneous information
 //------------------------------------------------------------------------
 
-// Background color
+// bKGD: Background color
 // Color type  3 (indexed color) -> Palette index:  1 byte
 // Color types 0 and 4 (gray or gray + alpha) -> Gray:  2 bytes, range 0 .. (2^bitdepth)-1
 // Color types 2 and 6 (truecolor, with or without alpha)
 //      Red:   2 bytes, range 0 .. (2^bitdepth)-1
 //      Green: 2 bytes, range 0 .. (2^bitdepth)-1
 //      Blue:  2 bytes, range 0 .. (2^bitdepth)-1
-typedef struct {
-    unsigned char *color;
-} rpng_chunk_bKGD;
 
-// Physical pixel dimensions
+
+// pHYs: Physical pixel dimensions
 typedef struct {
     unsigned int pixels_per_unit_x;
     unsigned int pixels_per_unit_y;
-    unsigned char unit_specifier;       // 0 - Unit unknown, 1 - Unit is meter
+    unsigned char unit_specifier;   // 0 - Unit unknown, 1 - Unit is meter
 } rpng_chunk_pHYs;
 
-// Image last-modification time
+// tIME: Image last-modification time
 typedef struct {
-    unsigned short year;         // Year complete, i.e. 1995
-    unsigned char month;         // 1 to 12
-    unsigned char day;           // 1 to 31
-    unsigned char hour;          // 0 to 23
-    unsigned char minute;        // 0 to 59
-    unsigned char second;        // 0 to 60 (yes, 60, for leap seconds; not 61, a common error)
+    unsigned short year;            // Year complete, i.e. 1995
+    unsigned char month;            // 1 to 12
+    unsigned char day;              // 1 to 31
+    unsigned char hour;             // 0 to 23
+    unsigned char minute;           // 0 to 59
+    unsigned char second;           // 0 to 60 (yes, 60, for leap seconds; not 61, a common error)
 } rpng_chunk_tIME;
 
 // Other chunks (view documentation)
@@ -405,6 +374,8 @@ struct sdefl {
     int tbl[SDEFL_HASH_SIZ];
     int prv[SDEFL_WIN_SIZ];
 };
+
+// Compression and decompression
 extern int sdefl_bound(int in_len);
 extern int sdeflate(struct sdefl *s, unsigned char *out, const unsigned char *in, int in_len, int lvl);
 extern int zsdeflate(struct sdefl *s, unsigned char *out, const unsigned char *in, int in_len, int lvl);
@@ -423,10 +394,6 @@ static unsigned int compute_crc32(unsigned char *buffer, int size); // Compute C
 // Load data from file into a buffer
 static char *load_file_to_buffer(const char *filename, int *bytes_read);
 static void save_file_from_buffer(const char *filename, void *data, int bytesToWrite);
-
-// Compression and decompression
-//static int sdeflate(struct sdefl *s, unsigned char *dst, const unsigned char *src, int src_len);
-//static unsigned sadler32(unsigned adler32, unsigned char *buffer, unsigned buf_len);
 
 //----------------------------------------------------------------------------------
 // Module Functions Definition
@@ -697,65 +664,271 @@ void rpng_chunk_write(const char *filename, rpng_chunk chunk)
 
 // Write text chunk data into PNG
 // NOTE: It will be added just after IHDR chunk
+// tEXt chunk data:
+//   unsigned char *keyword;     // Keyword: 1-80 bytes (must end with NULL separator: /0)
+//   unsigned char *text;        // Text: n bytes (character string, no NULL terminated required)
+// Keyword/Text usual values:
+//   Title            Short (one line) title or caption for image
+//   Author           Name of image's creator
+//   Description      Description of image (possibly long)
+//   Copyright        Copyright notice
+//   Creation Time    Time of original image creation
+//   Software         Software used to create the image
+//   Disclaimer       Legal disclaimer
+//   Warning          Warning of nature of content
+//   Source           Device used to create the image
+//   Comment          Miscellaneous comment
 void rpng_chunk_write_text(const char *filename, char *keyword, char *text)
 {
     int file_size = 0;
     char *file_data = load_file_to_buffer(filename, &file_size);
 
+    rpng_chunk chunk = { 0 };
+    
+    int keyword_len = strlen(keyword);
+    int text_len = strlen(text);
+
+    // Fill chunk with required data
+    // NOTE: CRC can be left to 0, it's calculated internally on writing
+    memcpy(chunk.type, "tEXt", 4);
+    chunk.length = keyword_len + 1 + text_len;
+    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    memcpy(((unsigned char*)chunk.data), keyword, keyword_len);
+    memcpy(((unsigned char*)chunk.data) + keyword_len + 1, text, text_len);
+    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
+
     int file_output_size = 0;
-    char *file_output = rpng_chunk_write_text_from_memory(file_data, keyword, text, &file_output_size);
+    char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
     if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
 
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
-/*
+
 // Write zTXt chunk, DEFLATE compressed text
+// zTXt chunk information and size:
+//    unsigned char *keyword;           // Keyword: 1-80 bytes (must end with NULL separator: /0)
+//    unsigned char comp;               // Compression method (0 for DEFLATE)
+//    unsigned char *comp_text;         // Compressed text: n bytes
 void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text)
 {
     int file_size = 0;
     char *file_data = load_file_to_buffer(filename, &file_size);
 
+    // Create chunk and fill with data
     rpng_chunk chunk = { 0 };
+
     int keyword_len = strlen(keyword);
     int text_len = strlen(text);
+
+    // Compress filtered image data and generate a valid zlib stream
+    struct sdefl *sde = RPNG_CALLOC(sizeof(struct sdefl), 1);
+    int bounds = sdefl_bound(text_len);
+    unsigned char *comp_text = (unsigned char *)RPNG_CALLOC(bounds, 1);
+    int comp_text_size = zsdeflate(sde, comp_text, (unsigned char *)text, text_len, 8);   // Compression level 8, same as stbwi
+    RPNG_FREE(sde);
+
+    // Fill chunk with required data
+    // NOTE: CRC can be left to 0, it's calculated internally on writing
+    memcpy(chunk.type, "zTXt", 4);
+    chunk.length = keyword_len + 1 + 1 + comp_text_size;
+    chunk.data = (unsigned char *)RPNG_CALLOC(chunk.length, 1);
+    memcpy(chunk.data, keyword, keyword_len);
+    memcpy(chunk.data + keyword_len + 2, comp_text, comp_text_size);
+    
+    int file_output_size = 0;
+    char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
+
+    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+
+    RPNG_FREE(chunk.data);
+    RPNG_FREE(comp_text);
+    RPNG_FREE(file_output);
+    RPNG_FREE(file_data);
+}
+
+// Write gAMA chunk
+// NOTE: Gamma is stored as one int: gamma*100000
+void rpng_chunk_write_gamma(const char *filename, float gamma)
+{
+    int file_size = 0;
+    char *file_data = load_file_to_buffer(filename, &file_size);
+
+    rpng_chunk chunk = { 0 };
+    
+    int gamma_value = (int)(gamma*100000);
+
+    // Fill chunk with required data
+    // NOTE: CRC can be left to 0, it's calculated internally on writing
+    memcpy(chunk.type, "gAMA", 4);
+    chunk.length = 4;
+    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    gamma_value = swap_endian(gamma_value);
+    memcpy(((unsigned char*)chunk.data), &gamma_value, 4);
+    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
+    
+    int file_output_size = 0;
+    char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
+
+    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
 
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
 
-// Write gAMA chunk (stored as int, gamma*100000)
-void rpng_chunk_write_gamma(const char *filename, float gamma)
-{
-    
-}
-
 // Write sRGB chunk, requires gAMA chunk
-void rpng_chunk_write_srgb(const char *filename, int srgb_type)
+// NOTE: This chunk only contains 1 byte of data defining rendering intent:
+//   0: Perceptual
+//   1: Relative colorimetric
+//   2: Saturation
+//   3: Absolute colorimetric
+void rpng_chunk_write_srgb(const char *filename, char srgb_type)
 {
+    int file_size = 0;
+    char *file_data = load_file_to_buffer(filename, &file_size);
+
+    rpng_chunk chunk = { 0 };
     
+    if ((srgb_type < 0) || (srgb_type > 3)) srgb_type = 0;
+    
+    // Fill chunk with required data
+    // NOTE: CRC can be left to 0, it's calculated internally on writing
+    memcpy(chunk.type, "sRGB", 4);
+    chunk.length = 1;
+    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    memcpy(((unsigned char*)chunk.data), &srgb_type, 1);
+    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
+    
+    int file_output_size = 0;
+    char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
+
+    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+
+    RPNG_FREE(file_output);
+    RPNG_FREE(file_data);
 }
 
 // Write tIME chunk
+// tIME chunk information and size:
+//   unsigned short year;         // Year complete, i.e. 1995
+//   unsigned char month;         // 1 to 12
+//   unsigned char day;           // 1 to 31
+//   unsigned char hour;          // 0 to 23
+//   unsigned char minute;        // 0 to 59
+//   unsigned char second;        // 0 to 60 (yes, 60, for leap seconds; not 61, a common error)
 void rpng_chunk_write_time(const char *filename, short year, char month, char day, char hour, char min, char sec)
 {
+    int file_size = 0;
+    char *file_data = load_file_to_buffer(filename, &file_size);
+
+    rpng_chunk chunk = { 0 };
+
+    // Fill chunk with required data
+    // NOTE: CRC can be left to 0, it's calculated internally on writing
+    memcpy(chunk.type, "tIME", 4);
+    chunk.length = 7;
+    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    memcpy(((unsigned char*)chunk.data), &year, 2);
+    memcpy(((unsigned char*)chunk.data) + 2, &month, 1);
+    memcpy(((unsigned char*)chunk.data) + 3, &day, 1);
+    memcpy(((unsigned char*)chunk.data) + 4, &hour, 1);
+    memcpy(((unsigned char*)chunk.data) + 5, &min, 1);
+    memcpy(((unsigned char*)chunk.data) + 6, &sec, 1);
+    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
     
-    
+    int file_output_size = 0;
+    char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
+
+    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+
+    RPNG_FREE(file_output);
+    RPNG_FREE(file_data);
 }
 
 // Write pHYs chunk
+// pHYs chunk information and size:
+//   unsigned int pixels_per_unit_x;
+//   unsigned int pixels_per_unit_y;
+//   unsigned char unit_specifier;       // 0 - Unit unknown, 1 - Unit is meter
 void rpng_chunk_write_physical_size(const char *filename, int pixels_unit_x, int pixels_unit_y, bool meters)
 {
+    int file_size = 0;
+    char *file_data = load_file_to_buffer(filename, &file_size);
+
+    rpng_chunk chunk = { 0 };
     
+    // Fill chunk with required data
+    // NOTE: CRC can be left to 0, it's calculated internally on writing
+    memcpy(chunk.type, "pHYs", 4);
+    chunk.length = 9;
+    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    pixels_unit_x = swap_endian(pixels_unit_x);
+    memcpy(((unsigned char*)chunk.data), &pixels_unit_x, 4);
+    pixels_unit_y = swap_endian(pixels_unit_y);
+    memcpy(((unsigned char*)chunk.data) + 4, &pixels_unit_y, 4);
+    char meters_value = (meters)? 1 : 0;
+    memcpy(((unsigned char*)chunk.data) + 8, &meters_value, 1);
+    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
+    
+    int file_output_size = 0;
+    char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
+
+    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+
+    RPNG_FREE(file_output);
+    RPNG_FREE(file_data);
 }
 
 // Write cHRM chunk
+// cHRM chunk information and size:
+//   unsigned int white_point_x;
+//   unsigned int white_point_y;
+//   unsigned int redx;
+//   unsigned int redy;
+//   unsigned int greenx;
+//   unsigned int greeny;
+//   unsigned int bluex;
+//   unsigned int bluey;
+// NOTE: Each value is stored as one int: value*100000
 void rpng_chunk_write_chroma(const char *filename, float white_x, float white_y, float red_x, float red_y, float green_x, float green_y, float blue_x, float blue_y)
 {
+    int file_size = 0;
+    char *file_data = load_file_to_buffer(filename, &file_size);
+
+    rpng_chunk chunk = { 0 };
     
+    // Fill chunk with required data
+    // NOTE: CRC can be left to 0, it's calculated internally on writing
+    memcpy(chunk.type, "pHYs", 4);
+    chunk.length = 8*4;     // 8 integer values
+    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    int white_x_value = swap_endian((int)(white_x*100000));
+    memcpy(((unsigned char*)chunk.data), &white_x_value, 4);
+    int white_y_value = swap_endian((int)(white_y*100000));
+    memcpy(((unsigned char*)chunk.data) + 4, &white_y_value, 4);
+    int red_x_value = swap_endian((int)(red_x*100000));
+    memcpy(((unsigned char*)chunk.data) + 8, &red_x_value, 4);
+    int red_y_value = swap_endian((int)(red_y*100000));
+    memcpy(((unsigned char*)chunk.data) + 12, &red_y_value, 4);
+    int green_x_value = swap_endian((int)(green_x*100000));
+    memcpy(((unsigned char*)chunk.data) + 16, &green_x_value, 4);
+    int green_y_value = swap_endian((int)(green_y*100000));
+    memcpy(((unsigned char*)chunk.data) + 20, &green_y_value, 4);
+    int blue_x_value = swap_endian((int)(blue_x*100000));
+    memcpy(((unsigned char*)chunk.data) + 24, &blue_x_value, 4);
+    int blue_y_value = swap_endian((int)(blue_y*100000));
+    memcpy(((unsigned char*)chunk.data) + 28, &blue_y_value, 4);
+    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
+    
+    int file_output_size = 0;
+    char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
+
+    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+
+    RPNG_FREE(file_output);
+    RPNG_FREE(file_data);
 }
-*/
 
 // Output info about the chunks
 void rpng_chunk_print_info(const char *filename)
@@ -1118,28 +1291,6 @@ char *rpng_chunk_write_from_memory(const char *buffer, rpng_chunk chunk, int *ou
         char *output_buffer_sized = RPNG_REALLOC(output_buffer, output_buffer_size);
         if (output_buffer_sized != NULL) output_buffer = output_buffer_sized;
     }
-
-    *output_size = output_buffer_size;
-    return output_buffer;
-}
-
-// Write tEXt chunk to memory buffer
-// NOTE: returns output data file_size
-char *rpng_chunk_write_text_from_memory(const char *buffer, char *keyword, char *text, int *output_size)
-{
-    rpng_chunk chunk = { 0 };
-    int keyword_len = strlen(keyword);
-    int text_len = strlen(text);
-
-    chunk.length = keyword_len + 1 + text_len;
-    memcpy(chunk.type, "tEXt", 4);
-    chunk.data = RPNG_CALLOC(chunk.length, 1);
-    memcpy(((unsigned char*)chunk.data), keyword, keyword_len);
-    memcpy(((unsigned char*)chunk.data) + keyword_len + 1, text, text_len);
-    chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
-
-    int output_buffer_size = 0;
-    char *output_buffer = rpng_chunk_write_from_memory(buffer, chunk, &output_buffer_size);
 
     *output_size = output_buffer_size;
     return output_buffer;
