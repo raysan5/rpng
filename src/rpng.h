@@ -141,7 +141,7 @@
 
 // After signature we have a series of chunks, every chunck has the same structure:
 typedef struct {
-    unsigned int length;    // Data length, must be converted to big endian when saving!
+    int length;             // Data length, must be converted to big endian when saving!
     unsigned char type[4];  // Chunk type FOURCC: IDHR, PLTE, IDAT, IEND / gAMA, sRGB, tEXt, tIME...
     unsigned char *data;    // Chunk data pointer
     unsigned int crc;       // 32bit CRC (computed over type and data)
@@ -198,7 +198,6 @@ RPNGAPI rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *cou
 RPNGAPI char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, int *output_size);          // Remove one chunk type from memory
 RPNGAPI char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_size);                        // Remove all chunks except: IHDR-IDAT-IEND
 RPNGAPI char *rpng_chunk_write_from_memory(const char *buffer, rpng_chunk chunk, int *output_size);                 // Write one new chunk after IHDR (any kind)
-RPNGAPI char *rpng_chunk_write_text_from_memory(const char *buffer, char *keyword, char *text, int *output_size);   // Write one new tEXt chunk
 RPNGAPI char *rpng_chunk_combine_image_data_from_memory(char *buffer, int *output_size);                            // Combine multiple IDAT chunks into a single one
 RPNGAPI char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_size, int *output_size);              // Split one IDAT chunk into multiple ones
 
@@ -625,7 +624,8 @@ void rpng_chunk_remove(const char *filename, const char *chunk_type)
     int file_output_size = 0;
     char *file_output = rpng_chunk_remove_from_memory(file_data, chunk_type, &file_output_size);
 
-    if (file_output_size < (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // TODO: Implement proper security check before writing to file
+    save_file_from_buffer(filename, file_output, file_output_size);
 
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
@@ -640,7 +640,8 @@ void rpng_chunk_remove_ancillary(const char *filename)
     int file_output_size = 0;
     char *file_output = rpng_chunk_remove_ancillary_from_memory(file_data, &file_output_size);
 
-    if (file_output_size < (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // TODO: Implement proper security check before writing to file
+    save_file_from_buffer(filename, file_output, file_output_size);
 
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
@@ -656,7 +657,9 @@ void rpng_chunk_write(const char *filename, rpng_chunk chunk)
     int file_output_size = 0;
     char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // Verify expected output size before writing to file
+    if (file_output_size == (file_size + chunk.length + 12)) save_file_from_buffer(filename, file_output, file_output_size);
+    else printf("WARNING: Failed to save file, output size not matching expected size");
 
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
@@ -700,8 +703,11 @@ void rpng_chunk_write_text(const char *filename, char *keyword, char *text)
     int file_output_size = 0;
     char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // Verify expected output size before writing to file
+    if (file_output_size == (file_size + chunk.length + 12)) save_file_from_buffer(filename, file_output, file_output_size);
+    else printf("WARNING: Failed to save file, output size not matching expected size");
 
+    RPNG_FREE(chunk.data);
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
@@ -740,7 +746,9 @@ void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text)
     int file_output_size = 0;
     char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // Verify expected output size before writing to file
+    if (file_output_size == (file_size + chunk.length + 12)) save_file_from_buffer(filename, file_output, file_output_size);
+    else printf("WARNING: Failed to save file, output size not matching expected size");
 
     RPNG_FREE(chunk.data);
     RPNG_FREE(comp_text);
@@ -771,8 +779,11 @@ void rpng_chunk_write_gamma(const char *filename, float gamma)
     int file_output_size = 0;
     char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // Verify expected output size before writing to file
+    if (file_output_size == (file_size + chunk.length + 12)) save_file_from_buffer(filename, file_output, file_output_size);
+    else printf("WARNING: Failed to save file, output size not matching expected size");
 
+    RPNG_FREE(chunk.data);
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
@@ -803,8 +814,11 @@ void rpng_chunk_write_srgb(const char *filename, char srgb_type)
     int file_output_size = 0;
     char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // Verify expected output size before writing to file
+    if (file_output_size == (file_size + chunk.length + 12)) save_file_from_buffer(filename, file_output, file_output_size);
+    else printf("WARNING: Failed to save file, output size not matching expected size");
 
+    RPNG_FREE(chunk.data);
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
@@ -840,8 +854,11 @@ void rpng_chunk_write_time(const char *filename, short year, char month, char da
     int file_output_size = 0;
     char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // Verify expected output size before writing to file
+    if (file_output_size == (file_size + chunk.length + 12)) save_file_from_buffer(filename, file_output, file_output_size);
+    else printf("WARNING: Failed to save file, output size not matching expected size");
 
+    RPNG_FREE(chunk.data);
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
@@ -874,8 +891,11 @@ void rpng_chunk_write_physical_size(const char *filename, int pixels_unit_x, int
     int file_output_size = 0;
     char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // Verify expected output size before writing to file
+    if (file_output_size == (file_size + chunk.length + 12)) save_file_from_buffer(filename, file_output, file_output_size);
+    else printf("WARNING: Failed to save file, output size not matching expected size");
 
+    RPNG_FREE(chunk.data);
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
@@ -924,8 +944,11 @@ void rpng_chunk_write_chroma(const char *filename, float white_x, float white_y,
     int file_output_size = 0;
     char *file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
 
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // Verify expected output size before writing to file
+    if (file_output_size == (file_size + chunk.length + 12)) save_file_from_buffer(filename, file_output, file_output_size);
+    else printf("WARNING: Failed to save file, output size not matching expected size");
 
+    RPNG_FREE(chunk.data);
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
 }
@@ -1001,8 +1024,8 @@ void rpng_chunk_combine_image_data(const char *filename)
     int file_output_size = 0;
     char *file_output = rpng_chunk_combine_image_data_from_memory(file_data, &file_output_size);
 
-    // TODO: Review this security check, it's horrible...
-    if (file_output_size < (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // TODO: Implement proper security check before writing to file
+    save_file_from_buffer(filename, file_output, file_output_size);
 
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
@@ -1017,8 +1040,8 @@ void rpng_chunk_split_image_data(const char *filename, int split_size)
     int file_output_size = 0;
     char *file_output = rpng_chunk_split_image_data_from_memory(file_data, split_size, &file_output_size);
 
-    // TODO: Review this security check, it's horrible...
-    if (file_output_size > (int)file_size) save_file_from_buffer(filename, file_output, file_output_size);
+    // TODO: Implement proper security check before writing to file
+    if (file_output_size > file_size) save_file_from_buffer(filename, file_output, file_output_size);
 
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
@@ -1545,9 +1568,9 @@ static char *load_file_to_buffer(const char *filename, int *bytes_read)
     else printf("FILEIO: File name provided is not valid\n");
 #else
     (void)filename;
-    #warning No FILE I / O API, RPNG_NO_STDIO defined
+    #warning No FILE I/O API, RPNG_NO_STDIO defined
 #endif
-        return data;
+    return data;
 }
 
 // Write data to file from buffer
@@ -1575,7 +1598,7 @@ static void save_file_from_buffer(const char *filename, void *data, int bytesToW
     (void)filename;
     (void)data;
     (void)bytesToWrite;
-    #warning No FILE I / O API, RPNG_NO_STDIO defined
+    #warning No FILE I/O API, RPNG_NO_STDIO defined
 #endif
 }
 
