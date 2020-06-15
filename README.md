@@ -4,10 +4,10 @@
 
 ## features
 
- - Count/read/write/remove png chunks
- - Chunks data abstraction (`png_chunk` type)
  - Create png file from raw pixel data
+ - Count/read/write/remove png chunks
  - Operates on file or memory-buffer
+ - Chunks data abstraction (`png_chunk` type)
  - Minimal `libc` usage and `RPNG_NO_STDIO` supported
  
 ## rpng basic file API
@@ -31,8 +31,8 @@ void rpng_chunk_split_image_data(const char *filename, int split_size);      // 
 ```
 
 ## some notes on API design
-`rpng` includes and advanced API to work directly on memory buffers, to avoid direct file access or allow virtual file systems.
-Those functions share the same signature than file functions but add a `_from_memory()` suffix and receive the memory buffer instead of the filename. Here an example:
+`rpng` includes an advanced API to work directly on memory buffers, to avoid direct file access or allow virtual file systems.
+Those functions share the same signature than file functions but add a `_from_memory()` suffix and receive the memory buffer instead of the filename, some of them also return the file output size. Here an example:
 ```c
 rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);            // Read one chunk type
 ```
@@ -41,7 +41,7 @@ rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_typ
 ```
 Note an important detail: memory function does not receive the size of the buffer. It was a design decision.
 It is expected that user provides valid data... but data is validated following PNG specs (png magic number, chunks data, IEND closing chunk).
-Memory functions that require writting data, return the output buffer size as a parameter: `int *output_size` and are limited in size by `RPNG_MAX_OUTPUT_SIZE` definition, by default 32MB.
+Memory functions that require writing data, return the output buffer size as a parameter: `int *output_size` and are limited in size by `RPNG_MAX_OUTPUT_SIZE` definition, by default 32MB, redefine that number if dealing with bigger PNG images.
 
 ## usage example
 There is a complete example [here](https://github.com/raysan5/rpng/blob/master/example/rpng_test_suite.c).
