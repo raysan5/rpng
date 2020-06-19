@@ -1062,14 +1062,12 @@ int rpng_chunk_count_from_memory(const char *buffer)
         buffer_ptr += 8;       // Move pointer after signature
 
         unsigned int chunk_size = swap_endian(((int *)buffer_ptr)[0]);
-        buffer_ptr += 4;
 
         while (memcmp(buffer_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
         {
-            buffer_ptr += (4 + 4 + chunk_size + 4);    // Skip chunk type FOURCC + chunk data + CRC32
+            buffer_ptr += (4 + 4 + chunk_size + 4);    // Skip chunk Length + FOURCC + chunk data + CRC32
 
             chunk_size = swap_endian(((int *)buffer_ptr)[0]);
-            buffer_ptr += 4;  // Skip chunk file_size
             count++;
         }
 
