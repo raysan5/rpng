@@ -173,7 +173,7 @@ RPNGAPI int rpng_chunk_count(const char *filename);                             
 RPNGAPI rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);    // Read one chunk type
 RPNGAPI rpng_chunk *rpng_chunk_read_all(const char *filename, int *count);           // Read all chunks
 RPNGAPI void rpng_chunk_remove(const char *filename, const char *chunk_type);        // Remove one chunk type
-RPNGAPI void rpng_chunk_remove_ancillary(const char *filename);                      // Remove all chunks except: IHDR-IDAT-IEND
+RPNGAPI void rpng_chunk_remove_ancillary(const char *filename);                      // Remove all chunks except: IHDR-PLTE-IDAT-IEND
 RPNGAPI void rpng_chunk_write(const char *filename, rpng_chunk data);                // Write one new chunk after IHDR (any kind)
 
 // Write specific chunks to file
