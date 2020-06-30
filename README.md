@@ -20,7 +20,7 @@ int rpng_chunk_count(const char *filename);                                  // 
 rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);    // Read one chunk type
 rpng_chunk *rpng_chunk_read_all(const char *filename, int *count);           // Read all chunks
 void rpng_chunk_remove(const char *filename, const char *chunk_type);        // Remove one chunk type
-void rpng_chunk_remove_ancillary(const char *filename);                      // Remove all chunks except: IHDR-IDAT-IEND
+void rpng_chunk_remove_ancillary(const char *filename);                      // Remove all chunks except: IHDR-PLTE-IDAT-IEND
 void rpng_chunk_write(const char *filename, rpng_chunk data);                // Write one new chunk after IHDR (any kind)
 
 // Chunk utilities
@@ -39,13 +39,39 @@ rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);       
 ```c
 rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_type);  // Read one chunk type from memory
 ```
-Note an important detail: memory function does not receive the size of the buffer. It was a design decision.
-It is expected that user provides valid data... but data is validated following PNG specs (png magic number, chunks data, IEND closing chunk).
-Memory functions that require writing data, return the output buffer size as a parameter: `int *output_size` and are limited in size by `RPNG_MAX_OUTPUT_SIZE` definition, by default 32MB, redefine that number if dealing with bigger PNG images.
+*Note an important detail:* memory functions do not receive the size of the buffer. It was a design decision.
+Data is validated following PNG specs (png magic number, chunks data, IEND closing chunk) but it's expected that user provides valid data.
+
+Memory functions that require writing data, return the output buffer size as a parameter: `int *output_size` and are limited in size by `RPNG_MAX_OUTPUT_SIZE` definition, by default **32MB**, redefine that number if dealing with bigger PNG images.
 
 ## usage example
-There is a complete example [here](https://github.com/raysan5/rpng/blob/master/example/rpng_test_suite.c).
+
+Write a custom data chunk into a png file:
 ```c
+#define RPNG_IMPLEMENTATION
+#include "rpng.h"
+
+int main()
+{
+    CustomDataType customData = { 0 };
+
+    // TODO: Fill your custom data
+
+    rpng_chunk chunk = { 0 };
+    memcpy(chunk.type, "cSTm", 4);
+    chunk.length = sizeof(CustomDataType);
+    chunk.data = &customData;
+    chunk.crc = 0;   // Automatically computed on writing
+
+    rpng_chunk_write("my_image.png", chunk);  // Write custom chunk
+}
+```
+
+Several chunk operations on a command line input file:
+```c
+#define RPNG_IMPLEMENTATION
+#include "rpng.h"
+
 int main(int argc, char *argv[])
 {
     if (argc > 1)
@@ -67,6 +93,8 @@ int main(int argc, char *argv[])
     return 0;
 }
 ```
+
+There is a complete example [here](https://github.com/raysan5/rpng/blob/master/example/rpng_test_suite.c).
 
 ## license
 
