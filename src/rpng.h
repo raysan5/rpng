@@ -1600,10 +1600,10 @@ static void save_file_from_buffer(const char *filename, void *data, int bytesToW
 #endif
 }
 
-//===================================================================
+//=========================================================================
 //                              SDEFL
-// DEFLATE algorythm implementation: https://github.com/vurtun/sdefl
-//===================================================================
+// DEFLATE algorythm implementation: https://github.com/vurtun/lib/sdefl.h
+//=========================================================================
 
 #define SDEFL_ZLIB_HDR      (0x01)
 
