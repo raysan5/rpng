@@ -6,6 +6,9 @@ rpng is provided as a self-contained portable single-file header-only library wi
 
 rpng implements internally the DEFLATE algorythm to allow reading and writing PNG images when required.
 
+<br>
+<br>
+
 ## features
 
  - Load and save png file from raw pixel data
