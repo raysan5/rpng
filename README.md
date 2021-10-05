@@ -17,7 +17,7 @@
  - Chunks data abstraction (`png_chunk` type)
  - Minimal `libc` usage and `RPNG_NO_STDIO` supported
  
-## basic fucntions
+## basic functions
 ```c
 // Create a PNG file from image data (IHDR, IDAT, IEND)
 void rpng_create_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
