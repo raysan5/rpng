@@ -2,22 +2,22 @@
 
 **rpng is a simple and easy-to-use library to manage png chunks.**
 
-rpng is provided as a self-contained portable single-file header-only library with no external dependencies. Its only dependency, the standard C library, can also be replaced with a custom implementation if required.
+`rpng` is provided as a self-contained portable single-file header-only library with no external dependencies. Its only dependency, the standard C library, can also be replaced with a custom implementation if required.
 
-rpng implements internally the DEFLATE algorythm to allow reading and writing PNG images when required.
+`rpng` implements internally the `DEFLATE` algorythm to allow reading and writing PNG images when required.
 
 <br>
 <br>
 
 ## features
 
- - Load and save png file from raw pixel data
+ - Load and save png files
  - Count/read/write/remove png chunks
  - Operates on file or memory-buffer
  - Chunks data abstraction (`png_chunk` type)
  - Minimal `libc` usage and `RPNG_NO_STDIO` supported
  
-## rpng basic file API
+## basic fucntions
 ```c
 // Create a PNG file from image data (IHDR, IDAT, IEND)
 void rpng_create_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
@@ -38,7 +38,7 @@ void rpng_chunk_combine_image_data(const char *filename);                    // 
 void rpng_chunk_split_image_data(const char *filename, int split_size);      // Split one IDAT chunk into multiple ones
 ```
 
-## some notes on API design
+## design notes
 `rpng` includes an advanced API to work directly on memory buffers, to avoid direct file access or allow virtual file systems.
 Those functions share the same signature than file functions but add a `_from_memory()` suffix and receive the memory buffer instead of the filename, some of them also return the file output size. Here an example:
 ```c
