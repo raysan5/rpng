@@ -1,10 +1,14 @@
-![](logo/rpng_256x256.png)
+<img align="left" src="https://github.com/raysan5/rpng/blob/master/logo/rpng_256x256.png" width=256>
 
-**rpng** is a simple and easy-to-use library to manage png chunks.
+**rpng is a simple and easy-to-use library to manage png chunks.**
+
+rpng is provided as a self-contained portable single-file header-only library with no external dependencies. Its only dependency, the standard C library, can also be replaced with a custom implementation if required.
+
+rpng implements internally the DEFLATE algorythm to allow reading and writing PNG images when required.
 
 ## features
 
- - Create png file from raw pixel data
+ - Load and save png file from raw pixel data
  - Count/read/write/remove png chunks
  - Operates on file or memory-buffer
  - Chunks data abstraction (`png_chunk` type)
@@ -14,6 +18,7 @@
 ```c
 // Create a PNG file from image data (IHDR, IDAT, IEND)
 void rpng_create_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
+char *rpng_load_image(const char *filename, int *width, int *height, int *color_channels, int force_channels);
 
 // Read and write chunks from file
 int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
