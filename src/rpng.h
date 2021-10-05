@@ -168,6 +168,9 @@ extern "C" {            // Prevents name mangling of functions
 // NOTE: It's up to the user to provide the right data format as specified by color_channels and bit_depth
 RPNGAPI void rpng_create_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
 
+// Load PNG image file data
+RPNGAPI char *rpng_load_image(const char *filename, int *width, int *height, int *color_channels, int force_channels);
+
 // Read and write chunks from file
 RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
 RPNGAPI rpng_chunk rpng_chunk_read(const char *filename, const char *chunk_type);    // Read one chunk type
@@ -571,6 +574,12 @@ void rpng_create_image(const char *filename, const char *data, int width, int he
     }
     
     RPNG_FREE(comp_data);
+}
+
+// Load PNG image file data
+char *rpng_load_image(const char *filename, int *width, int *height, int *color_channels, int force_channels)
+{
+    // TODO.
 }
 
 // Count number of PNG chunks
