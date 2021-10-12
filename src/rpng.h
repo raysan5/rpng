@@ -97,11 +97,6 @@
 #ifndef RPNG_H
 #define RPNG_H
 
-// Function specifiers definition
-#ifndef RPNGAPI
-    #define RPNGAPI       // Functions defined as 'extern' by default (implicit specifiers)
-#endif
-
 // Function specifiers in case library is build/used as a shared library (Windows)
 // NOTE: Microsoft specifiers to tell compiler that symbols are imported/exported from a .dll
 #if defined(_WIN32)
@@ -110,6 +105,11 @@
     #elif defined(USE_LIBTYPE_SHARED)
         #define RPNGAPI __declspec(dllimport)     // We are using the library as a Win32 shared library (.dll)
     #endif
+#endif
+
+// Function specifiers definition
+#ifndef RPNGAPI
+    #define RPNGAPI       // Functions defined as 'extern' by default (implicit specifiers)
 #endif
 
 //----------------------------------------------------------------------------------
