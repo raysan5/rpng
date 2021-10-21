@@ -62,6 +62,7 @@
 *       string.h        Required for: memcmp(), memcpy()
 *       stdio.h         Required for: FILE, fopen(), fread(), fwrite(), fclose() (only if !RPNG_NO_STDIO)
 *
+*
 *   CONFIGURATION:
 *
 *   #define RPNG_IMPLEMENTATION
@@ -73,9 +74,14 @@
 *       Do not include FILE I/O API, only read/write from memory buffers
 *
 *
+*   VERSIONS HISTORY:
+*
+*       1.0 (10-Jun-2020) First completely functional version of the library
+*
+*
 *   LICENSE: zlib/libpng
 *
-*   Copyright (c) 2020 Ramon Santamaria (@raysan5)
+*   Copyright (c) 2020-2021 Ramon Santamaria (@raysan5)
 *
 *   This software is provided "as-is", without any express or implied warranty. In no event
 *   will the authors be held liable for any damages arising from the use of this software.
