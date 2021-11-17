@@ -238,6 +238,7 @@ RPNGAPI char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_si
 
 #include <stdlib.h>         // Required for: malloc(), calloc(), free()
 #include <string.h>         // Required for: memcmp(), memcpy()
+#include <unistd.h>         // Required for: access()
 
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
@@ -410,6 +411,7 @@ static unsigned int compute_crc32(unsigned char *buffer, int size); // Compute C
 // Load data from file into a buffer
 static char *load_file_to_buffer(const char *filename, int *bytes_read);
 static void save_file_from_buffer(const char *filename, void *data, int bytesToWrite);
+static bool file_exists(const char *filename);                      // Check if the file exists
 
 //----------------------------------------------------------------------------------
 // Module Functions Definition
@@ -664,7 +666,7 @@ void rpng_chunk_remove_ancillary(const char *filename)
     char *file_output = rpng_chunk_remove_ancillary_from_memory(file_data, &file_output_size);
 
     // TODO: Implement proper security check before writing to file
-    save_file_from_buffer(filename, file_output, file_output_size);
+    if (file_output_size > 0) save_file_from_buffer(filename, file_output, file_output_size);
 
     RPNG_FREE(file_output);
     RPNG_FREE(file_data);
@@ -1557,8 +1559,9 @@ static char *load_file_to_buffer(const char *filename, int *bytes_read)
     *bytes_read = 0;
 
 #if !defined(RPNG_NO_STDIO)
-    if (filename != NULL)
+    if ((filename != NULL) && file_exists(filename))
     {
+        // TODO: Check if the file exists first to avoid creating a 0 bytes file in case it does not exist!
         FILE *file = fopen(filename, "rb");
 
         if (file != NULL)
@@ -1586,7 +1589,7 @@ static char *load_file_to_buffer(const char *filename, int *bytes_read)
         }
         else printf("FILEIO: [%s] Failed to open file\n", filename);
     }
-    else printf("FILEIO: File name provided is not valid\n");
+    else printf("FILEIO: File path provided is not valid\n");
 #else
     (void)filename;
     #warning No FILE I/O API, RPNG_NO_STDIO defined
@@ -1614,13 +1617,27 @@ static void save_file_from_buffer(const char *filename, void *data, int bytesToW
         }
         else printf("FILEIO: [%s] Failed to open file\n", filename);
     }
-    else printf("FILEIO: File name provided is not valid\n");
+    else printf("FILEIO: File path provided is not valid\n");
 #else
     (void)filename;
     (void)data;
     (void)bytesToWrite;
     #warning No FILE I/O API, RPNG_NO_STDIO defined
 #endif
+}
+
+// Check if the file exists
+static bool file_exists(const char *filename)
+{
+    bool result = false;
+
+#if defined(_WIN32)
+    if (_access(filename, 0) != -1) result = true;
+#else
+    if (access(filename, F_OK) != -1) result = true;
+#endif
+
+    return result;
 }
 
 //=========================================================================
