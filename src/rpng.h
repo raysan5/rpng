@@ -362,9 +362,15 @@ typedef struct {
 } rpng_chunk_tIME;
 
 // Other chunks (view documentation)
-//sBIT Significant bits
-//sPLT Suggested palette
-//hIST Palette histogram
+//sBIT: Significant bits
+//sPLT: Suggested palette
+//hIST: Palette histogram
+
+// TODO: Support APNG chunks
+// REF: https://wiki.mozilla.org/APNG_Specification
+//acTL: Animation Control
+//fcTL: Frame Control
+//fdAT: Frame Data
 
 //===================================================================
 //                              SDEFL
@@ -1559,9 +1565,9 @@ static char *load_file_to_buffer(const char *filename, int *bytes_read)
     *bytes_read = 0;
 
 #if !defined(RPNG_NO_STDIO)
+    // Check if the file exists before reading it
     if ((filename != NULL) && file_exists(filename))
     {
-        // TODO: Check if the file exists first to avoid creating a 0 bytes file in case it does not exist!
         FILE *file = fopen(filename, "rb");
 
         if (file != NULL)
