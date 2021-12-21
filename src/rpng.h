@@ -238,7 +238,12 @@ RPNGAPI char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_si
 
 #include <stdlib.h>         // Required for: malloc(), calloc(), free()
 #include <string.h>         // Required for: memcmp(), memcpy()
-#include <unistd.h>         // Required for: access()
+
+#if defined(_WIN32) && defined(_MSC_VER)
+    #include <io.h>         // Required for: access()
+#else
+    #include <unistd.h>     // Required for: access()
+#endif
 
 //----------------------------------------------------------------------------------
 // Types and Structures Definition

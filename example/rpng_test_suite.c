@@ -13,7 +13,6 @@
 #include "../src/rpng.h"
 
 #include <stdio.h>      // Required for: printf()
-
 #include <math.h>       // Required for: colors image generation
 
 
