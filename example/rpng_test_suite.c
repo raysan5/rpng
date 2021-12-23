@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    rpng_create_image("resources/colors_rpng.png", data, width, height, 8, 3);
+    rpng_save_image("resources/colors_rpng.png", data, width, height, 3, 8);
     RPNG_FREE(data);
 #endif
 #if 0
@@ -133,7 +133,50 @@ int main(int argc, char *argv[])
         }
     }
 
-    rpng_create_image("resources/pixels_rpng.png", data, width, height, 8, 4);
+    rpng_save_image("resources/pixels_rpng.png", data, width, height, 4, 8);
+    RPNG_FREE(data);
+#endif
+#if 0
+    // Load image raw data and save as PNG
+    unsigned char *pixdata = RPNG_MALLOC(2*2*4);
+
+    FILE *image = fopen("resources/pixelacos_rgba.raw", "rb");
+    fread(pixdata, 2*2*4, 1, image);
+    fclose(image);
+
+    rpng_save_image("resources/pixelacos_rpng.png", pixdata, 2, 2, 4, 8);
+    RPNG_FREE(pixdata);
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    int bits = 0;
+    char *data = rpng_load_image("resources/pixelacos_rpng.png", &width, &height, &channels, &bits);
+#endif
+#if 1
+    // Load image raw data and save as PNG
+    char *pixdata = RPNG_MALLOC(384*512*4);
+
+    FILE *image = fopen("resources/fudesumi_rgba.raw", "rb");
+    fread(pixdata, 384*512*4, 1, image);
+    fclose(image);
+
+    rpng_save_image("resources/fudesumi_rpng.png", pixdata, 384, 512, 4, 8);
+    RPNG_FREE(pixdata);
+#endif
+#if 0
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    int bits = 0;
+    char *data = rpng_load_image("resources/fudesumi_rpng.png", &width, &height, &channels, &bits);
+    if (data != NULL)
+    {
+        FILE *image = fopen("resources/fudesumi_rpng_output.raw", "wb");
+        fwrite(data, 1, width*height*channels*bits/8, image);
+        fclose(image);
+    }
+    rpng_save_image("resources/fudesumi_rpng_saved.png", data, width, height, 4, 8);
     RPNG_FREE(data);
 #endif
 
