@@ -693,6 +693,7 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
     // Read all chunks
     int count = 0;
     rpng_chunk *chunks = rpng_chunk_read_all(filename, &count);
+    if (chunks == NULL) return data;
 
     // First chunk is always IHDR, we can check image data info
     rpng_chunk_IHDR *IHDRData = (rpng_chunk_IHDR *)chunks[0].data;
@@ -729,8 +730,14 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
             if (memcmp(chunks[i].type, "IDAT", 4) == 0)     // Check IDAT chunk: image data
             {
                 // Verify data integrity CRC
-                //unsigned int crc = compute_crc32((unsigned char *)chunks[i].type, 4 + chunks[i].length);
-                if (1) //swap_endian(crc) == chunks[i].crc)
+                unsigned int crc = 0;
+                char *chunk_type_data = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
+                memcpy(chunk_type_data, chunks[i].type, 4);
+                memcpy(chunk_type_data + 4, chunks[i].data, chunks[i].length);
+                crc = compute_crc32((unsigned char *)chunk_type_data, 4 + chunks[i].length);
+                RPNG_FREE(chunk_type_data);
+
+                if (crc == chunks[i].crc)
                 {
                     data_piece[dataChunkCounter] = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
 
@@ -1224,6 +1231,7 @@ void rpng_chunk_print_info(const char *filename)
 {
     int count = 0;
     rpng_chunk *chunks = rpng_chunk_read_all(filename, &count);
+    if (chunks == NULL) return;
 
     RPNG_LOG("\n| Chunk |   Data Length  |   CRC32   |\n");
     RPNG_LOG("|-------|----------------|-----------|\n");
@@ -1255,22 +1263,26 @@ bool rpng_chunk_check_all_valid(const char *filename)
     
     int count = 0;
     rpng_chunk *chunks = rpng_chunk_read_all(filename, &count);
+    if (chunks == NULL) return;
     
     unsigned int crc = 0;
     char *chunk_type_data = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
     
-    for (int i = 0; i < count; i++)
+    if (chunk_type_data != NULL)
     {
-        memcpy(chunk_type_data, chunks[i].type, 4);
-        memcpy(chunk_type_data + 4, chunks[i].data, chunks[i].length);
-        crc = compute_crc32((unsigned char *)chunk_type_data, 4 + chunks[i].length);
-        crc = swap_endian(crc);
-        
-        // Check computed CRC matches provided CRC
-        if (chunks[i].crc != crc) 
+        for (int i = 0; i < count; i++)
         {
-            result = false;
-            break;
+            memcpy(chunk_type_data, chunks[i].type, 4);
+            memcpy(chunk_type_data + 4, chunks[i].data, chunks[i].length);
+            crc = compute_crc32((unsigned char *)chunk_type_data, 4 + chunks[i].length);
+            crc = swap_endian(crc);
+
+            // Check computed CRC matches provided CRC
+            if (chunks[i].crc != crc)
+            {
+                result = false;
+                break;
+            }
         }
     }
 
