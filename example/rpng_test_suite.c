@@ -153,7 +153,7 @@ int main(int argc, char *argv[])
     int bits = 0;
     char *data = rpng_load_image("resources/pixelacos_rpng.png", &width, &height, &channels, &bits);
 #endif
-#if 1
+#if 0
     // Load image raw data and save as PNG
     char *pixdata = RPNG_MALLOC(384*512*4);
 
@@ -164,19 +164,19 @@ int main(int argc, char *argv[])
     rpng_save_image("resources/fudesumi_rpng.png", pixdata, 384, 512, 4, 8);
     RPNG_FREE(pixdata);
 #endif
-#if 0
+#if 1
     int width = 0;
     int height = 0;
     int channels = 0;
     int bits = 0;
-    char *data = rpng_load_image("resources/fudesumi_rpng.png", &width, &height, &channels, &bits);
+    char *data = rpng_load_image("resources/fudesumi_rpng_save.png", &width, &height, &channels, &bits);
     if (data != NULL)
     {
         FILE *image = fopen("resources/fudesumi_rpng_output.raw", "wb");
         fwrite(data, 1, width*height*channels*bits/8, image);
         fclose(image);
     }
-    rpng_save_image("resources/fudesumi_rpng_saved.png", data, width, height, 4, 8);
+    //rpng_save_image("resources/fudesumi_rpng_saved.png", data, width, height, 4, 8);
     RPNG_FREE(data);
 #endif
 
