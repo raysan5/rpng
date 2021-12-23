@@ -687,6 +687,7 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
     char *data = NULL;
 
     void *data_piece[RPNG_MAX_CHUNKS_COUNT] = { 0 };
+    int data_piece_size[RPNG_MAX_CHUNKS_COUNT] = { 0 };
     unsigned int dataChunkCounter = 0;
 
     // Read all chunks
@@ -716,12 +717,15 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
     //IHDRData->filter;             // Filter method: 0 (default)
     //IHDRData->interlace;          // Interlace scheme (optional): 0 (none)
 
+    //int firstDataChunk = 0;
+    //bool consecutiveDataChunks = true;
+
     if (*color_channels != 0)
     {
         for (int i = 1; i < count; i++)
         {
             // NOTE: There can be multiple IDAT chunks; if so, 
-            // they must appear consecutively with no other intervening chunks
+            // they must appear consecutively with no other intervening chunks (not checked -> TODO)
             if (memcmp(chunks[i].type, "IDAT", 4) == 0)     // Check IDAT chunk: image data
             {
                 // Verify data integrity CRC
@@ -731,11 +735,11 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
                     data_piece[dataChunkCounter] = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
 
                     // Decompress IDAT chunk data
-                    int size = zsinflate(data_piece[dataChunkCounter], RPNG_MAX_OUTPUT_SIZE, chunks[i].data, chunks[i].length);
+                    int data_decomp_size = zsinflate(data_piece[dataChunkCounter], RPNG_MAX_OUTPUT_SIZE, chunks[i].data, chunks[i].length);
 
-                    RPNG_LOG("INFO: IDAT data decompressed: %i -> %i\n", chunks[i].length, size);
+                    RPNG_LOG("INFO: IDAT data decompressed: %i -> %i\n", chunks[i].length, data_decomp_size);
 
-                    if (size <= 0)
+                    if (data_decomp_size <= 0)
                     {
                         RPNG_LOG("WARNING: IDAT image data chunk decompression failed\n");
                         break;
@@ -748,9 +752,8 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
                     // Image data reverse pre-processing for filter type
                     int pixel_size = *color_channels*(*bit_depth/8);
                     int scanline_size = *width*pixel_size;
-                    unsigned int data_unfiltered_size = (*width)*(*height)*pixel_size;
                     unsigned char *data_filtered = (unsigned char *)data_piece[dataChunkCounter];
-                    unsigned char *data_unfiltered = (unsigned char *)RPNG_CALLOC(data_unfiltered_size, 1);
+                    unsigned char *data_unfiltered = (unsigned char *)RPNG_CALLOC(data_decomp_size, 1);  // Actually data unfiltered size should be smaller
 
                     int current_filter = 0;
                     int out = 0, x = 0, a = 0, b = 0, c = 0;
@@ -788,6 +791,7 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
 
                     RPNG_FREE(data_piece[dataChunkCounter]);
                     data_piece[dataChunkCounter] = data_unfiltered;
+                    data_piece_size[dataChunkCounter] = data_decomp_size - (*height);
                 }
                 else
                 {
@@ -811,10 +815,22 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
     for (int i = 0; i < count; i++) RPNG_FREE(chunks[i].data);
     RPNG_FREE(chunks);
 
-    // If everything when right, now we have all IDAT chunks decompressed in data_piece[]
-    // Before concatenating, lets do a simple test:
-    data = data_piece[0];
+    if (dataChunkCounter == 1) data = data_piece[0];
+    else
+    {
+        // Load enough memory for all image uncompressed data
+        data = (char *)RPNG_CALLOC((*width)*(*height)*(*color_channels)*(*bit_depth/8), 1);
 
+        // Concatenate all data chunks (already uncompressed and unfiltered)
+        for (int i = 0; i < dataChunkCounter; i++)
+        {
+            memcpy(data, data_piece[i], data_piece_size[i]);
+            data += data_piece_size[i];
+        }
+
+        for (int i = 0; i < dataChunkCounter; i++) RPNG_FREE(data_piece[i]);
+    }
+    
     return data;
 }
 
