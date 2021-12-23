@@ -11,7 +11,7 @@
 
 ## features
 
- - Create png files from raw image data
+ - Load/Save png files to/from raw image data
  - Count/read/write/remove png chunks
  - Operates on file or memory-buffer
  - Chunks data abstraction (`png_chunk` type)
@@ -19,9 +19,9 @@
  
 ## basic functions
 ```c
-// Create a PNG file from image data (IHDR, IDAT, IEND)
-void rpng_create_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
-char *rpng_load_image(const char *filename, int *width, int *height, int *color_channels, int force_channels);
+// Load/Save a PNG file from image data (IHDR, IDAT, IEND)
+char *rpng_load_image(const char *filename, int *width, int *height, int *color_channels, int *bit_depth);
+void rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
 
 // Read and write chunks from file
 int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
