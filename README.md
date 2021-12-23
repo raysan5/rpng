@@ -4,7 +4,7 @@
 
 `rpng` is provided as a self-contained portable single-file header-only library with no external dependencies. Its only dependency, the standard C library, can also be replaced with a custom implementation if required.
 
-`rpng` implements internally the `DEFLATE` algorythm to allow reading and writing PNG images when required.
+`rpng` implements internally the `DEFLATE` algorithm to allow reading and writing PNG images when required.
 
 <br>
 <br>
