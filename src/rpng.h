@@ -80,13 +80,13 @@
 *
 *   VERSIONS HISTORY:
 *
-*       1.1 (24-Dec-2021) ADDED: rpng_load_image()
+*       1.0 (24-Dec-2021) ADDED: rpng_load_image()
 *                         ADDED: RPNG_LOG() macro
 *                         REVIEWED: rpng_save_image() filter process issues
 *                         RENAMED: rpng_create_image() to rpng_save_image()
 *                         UPDATED: sdefl to latest version 1.0
 *                         ADDED: sinfl library (internal copy) for data decompression
-*       1.0 (10-Jun-2020) First completely functional version of the library
+*       0.9 (10-Jun-2020) First completely functional version of the library
 *
 *
 *   LICENSE: zlib/libpng
