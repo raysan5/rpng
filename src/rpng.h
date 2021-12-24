@@ -8,6 +8,10 @@
 *       - Operate on file or file-buffer
 *       - Chunks data abstraction
 *       - Add custom chunks
+*
+*   LIMITATIONS:
+*       - No Indexed color type supported
+*       - No Grayscale color type with 1/2/4 bits (1 channel), only 8/16 bits
 * 
 *   CONFIGURATION:
 *
@@ -528,7 +532,7 @@ static unsigned char rpng_paeth_predictor(int a, int b, int c)
 // NOTE: It's up to the user to provide the right data format as specified by color_channels and bit_depth
 void rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth)
 {
-    if ((bit_depth != 8) && (bit_depth != 16)) return;  // Bit depth not supported
+    if ((bit_depth != 8) && (bit_depth != 16)) return;  // Bit depth 1/2/4 not supported
 
     int color_type = -1;
     if (color_channels == 1) color_type = 0;        // Grayscale
@@ -712,6 +716,8 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
         case 3: *color_channels = 0; break;     // Pixel format: 3-Indexed  (Not supported)
         default: break;
     }
+    
+    if ((*color_channels == 1) && (*bit_depth != 8) && (*bit_depth != 16)) return data;  // Bit depth 1/2/4 not supported
 
     // Additional info provided by IHDR (in case it was required)
     //IHDRData->compression;        // Compression method: 0 (DEFLATE)
@@ -725,8 +731,8 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
     {
         for (int i = 1; i < count; i++)
         {
-            // NOTE: There can be multiple IDAT chunks; if so, 
-            // they must appear consecutively with no other intervening chunks (not checked -> TODO)
+            // NOTE: There can be multiple IDAT chunks; if so, they must appear
+            // consecutively with no other intervening chunks (not checked -> TODO)
             if (memcmp(chunks[i].type, "IDAT", 4) == 0)     // Check IDAT chunk: image data
             {
                 // Verify data integrity CRC
