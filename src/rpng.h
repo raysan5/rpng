@@ -1263,7 +1263,7 @@ bool rpng_chunk_check_all_valid(const char *filename)
     
     int count = 0;
     rpng_chunk *chunks = rpng_chunk_read_all(filename, &count);
-    if (chunks == NULL) return;
+    if (chunks == NULL) return false;
     
     unsigned int crc = 0;
     char *chunk_type_data = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
