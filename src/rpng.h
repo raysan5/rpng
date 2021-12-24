@@ -1,6 +1,6 @@
 /**********************************************************************************************
 *
-*   rpng v1.1 - A simple and easy-to-use library to manage png chunks
+*   rpng v1.0 - A simple and easy-to-use library to manage png chunks
 *
 *   FEATURES:
 *       - Load/Save PNG images from/to raw image data
@@ -113,7 +113,7 @@
 #ifndef RPNG_H
 #define RPNG_H
 
-#define RPNG_VERSION    "1.1"
+#define RPNG_VERSION    "1.0"
 
 // Function specifiers in case library is build/used as a shared library (Windows)
 // NOTE: Microsoft specifiers to tell compiler that symbols are imported/exported from a .dll
