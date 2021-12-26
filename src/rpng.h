@@ -267,9 +267,9 @@ RPNGAPI char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_si
 #include <string.h>         // Required for: memcmp(), memcpy()
 
 #if defined(_WIN32) && defined(_MSC_VER)
-    #include <io.h>         // Required for: access()
+    #include <io.h>         // Required for: _access() [file_exists()]
 #else
-    #include <unistd.h>     // Required for: access()
+    #include <unistd.h>     // Required for: access() (POSIX, not C standard) [file_exists()]
 #endif
 
 //----------------------------------------------------------------------------------
