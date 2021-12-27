@@ -638,7 +638,7 @@ void rpng_save_image(const char *filename, const char *data, int width, int heig
     int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_size_filtered, 8);   // Compression level 8, same as stbwi
     RPNG_FREE(sde);
     
-    RPNG_LOG("Data size: %i -> Comp data size: %i\n", data_size_filtered, comp_data_size);
+    RPNG_LOG("INFO: Data size: %i -> Comp data size: %i\n", data_size_filtered, comp_data_size);
 
     // Security check to verify compression worked
     if (comp_data_size > 0)
@@ -883,12 +883,9 @@ rpng_chunk *rpng_chunk_read_all(const char *filename, int *count)
     int counter = 0;
     rpng_chunk *chunks = NULL;
     
-    if (file_data != NULL)
-    {
-        chunks = rpng_chunk_read_all_from_memory(file_data, &counter);
-        RPNG_FREE(file_data);
-    }
-    else RPNG_LOG("WARNING: File data could not be read\n");
+    chunks = rpng_chunk_read_all_from_memory(file_data, &counter);
+    
+    RPNG_FREE(file_data);
 
     *count = counter;
     return chunks;
@@ -1860,7 +1857,7 @@ static char *load_file_to_buffer(const char *filename, int *bytes_read)
 static void save_file_from_buffer(const char *filename, void *data, int bytesToWrite)
 {
 #if !defined(RPNG_NO_STDIO)
-    if (filename != NULL)
+    if ((filename != NULL) && (data != NULL) && (bytesToWrite > 0))
     {
         FILE *file = fopen(filename, "wb");
 
@@ -1876,7 +1873,7 @@ static void save_file_from_buffer(const char *filename, void *data, int bytesToW
         }
         else RPNG_LOG("FILEIO: [%s] Failed to open file\n", filename);
     }
-    else RPNG_LOG("FILEIO: File path provided is not valid\n");
+    else RPNG_LOG("FILEIO: File path or data provided are not valid\n");
 #else
     (void)filename;
     (void)data;
