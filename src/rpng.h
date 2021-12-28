@@ -211,7 +211,12 @@ RPNGAPI char *rpng_load_image(const char *filename, int *width, int *height, int
 //  - Bit depth defines every color channel size, supported values: 8 bit, 16 bit
 // NOTE: It's up to the user to provide the right data format as specified by color_channels and bit_depth
 RPNGAPI void rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
-//RPNGAPI void rpng_save_image_indexed(const char *filename, const char *data, int width, int height, const char *palette, int palette_size);
+
+// Save a PNG file from indexed image data (IHDR, PLTE, (tRNS), IDAT, IEND)
+//  - Palette colours must be provided as R8G8B8, they are saved in PLTE chunk
+//  - Palette alpha should be provided as R8, it is saved in tRNS chunk (if not NULL)
+//  - Palette max number of entries is limited to [1..256] colors
+RPNGAPI void rpng_save_image_indexed(const char *filename, const char *data, int width, int height, const char *palette, const char *palette_alpha, int palette_size);
 
 // Read and write chunks from file
 RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
@@ -420,7 +425,7 @@ const char png_signature[8] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }
 static unsigned int swap_endian(unsigned int value);                // Swap integer from big<->little endian
 static unsigned int compute_crc32(unsigned char *buffer, int size); // Compute CRC32
 
-// Load/save data from memory buffers
+// Load/save png file data from/to memory buffer
 static char *load_file_to_buffer(const char *filename, int *bytes_read);
 static void save_file_from_buffer(const char *filename, void *data, int bytesToWrite);
 static bool file_exists(const char *filename);                      // Check if the file exists
@@ -564,6 +569,17 @@ void rpng_save_image(const char *filename, const char *data, int width, int heig
     else RPNG_LOG("WARNING: PNG data saving failed");
     
     RPNG_FREE(file_output);
+}
+
+// Save a PNG file from indexed image data (IHDR, PLTE, (tRNS), IDAT, IEND)
+//  - Palette colours must be provided as RGB888, they are saved in PLTE chunk
+//  - Palette alpha should be provided as R8, it is saved in tRNS chunk (if not NULL)
+//  - Palette max number of entries is limited to [1..256] colors
+void rpng_save_image_indexed(const char *filename, const char *data, int width, int height, const char *palette, const char *palette_alpha, int palette_size)
+{
+    // TODO: Support PLTE + tRNS
+    
+    // Indexed color data uses image prefilter 0 by default
 }
 
 // Count number of PNG chunks
