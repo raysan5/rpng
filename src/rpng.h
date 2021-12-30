@@ -706,8 +706,8 @@ void rpng_chunk_write_text(const char *filename, char *keyword, char *text)
 
     rpng_chunk chunk = { 0 };
     
-    int keyword_len = strlen(keyword);
-    int text_len = strlen(text);
+    int keyword_len = (int)strlen(keyword);
+    int text_len = (int)strlen(text);
 
     // Fill chunk with required data
     // NOTE: CRC can be left to 0, it's calculated internally on writing
@@ -743,8 +743,8 @@ void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text)
     // Create chunk and fill with data
     rpng_chunk chunk = { 0 };
 
-    int keyword_len = strlen(keyword);
-    int text_len = strlen(text);
+    int keyword_len = (int)strlen(keyword);
+    int text_len = (int)strlen(text);
 
     // Compress filtered image data and generate a valid zlib stream
     struct sdefl *sde = RPNG_CALLOC(sizeof(struct sdefl), 1);
@@ -1222,13 +1222,13 @@ char *rpng_load_image_from_memory(const char *buffer, int *width, int *height, i
         data = (char *)RPNG_CALLOC((*width)*(*height)*(*color_channels)*(*bit_depth/8), 1);
 
         // Concatenate all data chunks (already uncompressed and unfiltered)
-        for (int i = 0; i < dataChunkCounter; i++)
+        for (unsigned int i = 0; i < dataChunkCounter; i++)
         {
             memcpy(data, data_piece[i], data_piece_size[i]);
             data += data_piece_size[i];
         }
 
-        for (int i = 0; i < dataChunkCounter; i++) RPNG_FREE(data_piece[i]);
+        for (unsigned int i = 0; i < dataChunkCounter; i++) RPNG_FREE(data_piece[i]);
     }
     
     return data;
@@ -1353,7 +1353,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
     // Security check to verify compression worked
     if (comp_data_size > 0)
     {
-        output_buffer = (char *)RPNG_CALLOC(8 + (13 + 12) + (comp_data_size + 12) + (12), 1); // Signature + IHDR + IDAT + IEND
+        output_buffer = (char *)RPNG_CALLOC(8 + 13 + 12 + (comp_data_size + 12) + 12, 1); // Signature + IHDR + IDAT + IEND
 
         // Write PNG signature
         memcpy(output_buffer, png_signature, 8);
