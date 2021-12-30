@@ -20,8 +20,12 @@
 *       If not defined, the library is in header only mode and can be included in other headers
 *       or source files without problems. But only ONE file should hold the implementation.
 *
+*   #define RPNG_DEFLATE_IMPLEMENTATION
+*       Include sdefl/sinfl deflate implementation with rpng
+*
 *   #define RPNG_NO_STDIO
 *       Do not include FILE I/O API, only read/write from memory buffers
+*
 * 
 *   DEPENDENCIES: libc (C standard library)
 *       stdlib.h        Required for: malloc(), calloc(), free()
@@ -1349,7 +1353,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
     // Security check to verify compression worked
     if (comp_data_size > 0)
     {
-        output_buffer = (unsigned char *)RPNG_CALLOC(8 + (13 + 12) + (comp_data_size + 12) + (12), 1); // Signature + IHDR + IDAT + IEND
+        output_buffer = (char *)RPNG_CALLOC(8 + (13 + 12) + (comp_data_size + 12) + (12), 1); // Signature + IHDR + IDAT + IEND
 
         // Write PNG signature
         memcpy(output_buffer, png_signature, 8);
@@ -1952,6 +1956,8 @@ static bool file_exists(const char *filename)
 
     return result;
 }
+
+#if defined(RPNG_DEFLATE_IMPLEMENTATION)
 
 //=========================================================================
 //                              SDEFL
@@ -3006,5 +3012,6 @@ ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------------
 */
+#endif  // RPNG_DEFLATE_IMPLEMENTATION
 
 #endif  // RPNG_IMPLEMENTATION
