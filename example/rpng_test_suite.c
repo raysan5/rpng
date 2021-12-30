@@ -10,6 +10,7 @@
 ********************************************************************************************/
 
 #define RPNG_IMPLEMENTATION
+#define RPNG_DEFLATE_IMPLEMENTATION
 #include "../src/rpng.h"
 
 #include <stdio.h>      // Required for: printf()
@@ -48,12 +49,13 @@ int main(int argc, char *argv[])
         // TEST: Write a custom chunk - rPNG
         rpng_chunk chunk = { 0 };
         chunk.length = 20;              // Data length
-        memcpy(chunk.type, "rPNG", 4);  // Chunck type FOURCC
-        chunk.data = RPNG_MALLOC(20);   // Chunck data pointer
+        memcpy(chunk.type, "rPNG", 4);  // Chunk type FOURCC
+        chunk.data = RPNG_MALLOC(20);   // Chunk data pointer
         memcpy(chunk.data, "This is a test data.", 20);
         chunk.crc = 0;  // CRC automatically computed over type and data on writing
 
         rpng_chunk_write(argv[1], chunk);
+        RPNG_FREE(chunk.data);
 
         rpng_chunk_print_info(argv[1]);
 
@@ -73,7 +75,7 @@ int main(int argc, char *argv[])
         printf("  Chunk data:    %s\n", data);
         printf("  Chunk crc:     %08X\n\n", rchunk.crc);
 
-        RPNG_FREE(chunk.data);
+        RPNG_FREE(rchunk.data);
 
         // TEST: Remove chunks
         rpng_chunk_remove(argv[1], "rPNG");
