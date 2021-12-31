@@ -1364,7 +1364,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
         memcpy(output_buffer + 8, &length_IHDR, 4);
         memcpy(output_buffer + 8 + 4, "IHDR", 4);
         memcpy(output_buffer + 8 + 4 + 4, &image_info, 13);
-        unsigned int crc = compute_crc32(output_buffer + 8 + 4, 4 + 13);
+        unsigned int crc = compute_crc32((unsigned char *)output_buffer + 8 + 4, 4 + 13);
         crc = swap_endian(crc);
         memcpy(output_buffer + 8 + 8 + 13, &crc, 4);
         output_buffer_size += (8 + 12 + 13);
@@ -1375,7 +1375,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
         memcpy(output_buffer + output_buffer_size, &length_IDAT, 4);
         memcpy(output_buffer + output_buffer_size + 4, "IDAT", 4);
         memcpy(output_buffer + output_buffer_size + 8, comp_data, comp_data_size);
-        crc = compute_crc32(output_buffer + output_buffer_size + 4, 4 + comp_data_size);
+        crc = compute_crc32((unsigned char *)output_buffer + output_buffer_size + 4, 4 + comp_data_size);
         crc = swap_endian(crc);
         memcpy(output_buffer + output_buffer_size + 8 + comp_data_size, &crc, 4);
         output_buffer_size += (comp_data_size + 12);
