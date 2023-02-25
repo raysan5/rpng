@@ -140,10 +140,10 @@ int main(int argc, char *argv[])
 #endif
 #if 0
     // Load image raw data and save as PNG
-    unsigned char *pixdata = RPNG_MALLOC(2*2*4);
+    unsigned char *pixdata = (unsigned char *)RPNG_MALLOC(2*2*4);
 
     FILE *image = fopen("resources/pixelacos_rgba.raw", "rb");
-    fread(pixdata, 2*2*4, 1, image);
+    fread(pixdata, 1, 2*2*4, image);
     fclose(image);
 
     rpng_save_image("resources/pixelacos_rpng.png", pixdata, 2, 2, 4, 8);
@@ -157,10 +157,10 @@ int main(int argc, char *argv[])
 #endif
 #if 0
     // Load image raw data and save as PNG
-    char *pixdata = RPNG_MALLOC(384*512*4);
+    char *pixdata = (char *)RPNG_MALLOC(384*512*4);
 
     FILE *image = fopen("resources/fudesumi_rgba.raw", "rb");
-    fread(pixdata, 384*512*4, 1, image);
+    fread(pixdata, 1, 384*512*4, image);
     fclose(image);
 
     rpng_save_image("resources/fudesumi_rpng.png", pixdata, 384, 512, 4, 8);
