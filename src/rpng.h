@@ -12,27 +12,28 @@
 *   LIMITATIONS:
 *       - No Indexed color type supported
 *       - No Grayscale color type with 1/2/4 bits (1 channel), only 8/16 bits
+*
+*   POSSIBLE IMPROVEMENTS:
+*       - Support error return codes, not only errors logging
 * 
 *   CONFIGURATION:
-*
-*   #define RPNG_IMPLEMENTATION
-*       Generates the implementation of the library into the included file.
-*       If not defined, the library is in header only mode and can be included in other headers
-*       or source files without problems. But only ONE file should hold the implementation.
-*
-*   #define RPNG_DEFLATE_IMPLEMENTATION
-*       Include sdefl/sinfl deflate implementation with rpng
-*
-*   #define RPNG_NO_STDIO
-*       Do not include FILE I/O API, only read/write from memory buffers
-*
+*       #define RPNG_IMPLEMENTATION
+*           Generates the implementation of the library into the included file.
+*           If not defined, the library is in header only mode and can be included in other headers
+*           or source files without problems. But only ONE file should hold the implementation.
+*   
+*       #define RPNG_DEFLATE_IMPLEMENTATION
+*           Include sdefl/sinfl deflate implementation with rpng
+*   
+*       #define RPNG_NO_STDIO
+*           Do not include FILE I/O API, only read/write from memory buffers
 * 
 *   DEPENDENCIES: libc (C standard library)
 *       stdlib.h        Required for: malloc(), calloc(), free()
 *       string.h        Required for: memcmp(), memcpy()
 *       stdio.h         Required for: FILE, fopen(), fread(), fwrite(), fclose() (only if !RPNG_NO_STDIO)
 *
-*       rpng includes internally a copy of sdefl and sinfl libraries by Micha Mettke
+*       rpng includes internally a copy of sdefl and sinfl libraries by Micha Mettke (@vurtun)
 *       sdelf and sinfl libraries are used for compression and decompression of deflate data streams
 *       sdelf and sinfl are double licensed as MIT or Unlicense, check license at the end of this file
 *
@@ -85,9 +86,7 @@
 *       Source           Device used to create the image
 *       Comment          Miscellaneous comment; conversion from GIF comment
 *
-*
 *   VERSIONS HISTORY:
-*
 *       1.0 (24-Dec-2021) ADDED: rpng_load_image()
 *                         ADDED: RPNG_LOG() macro
 *                         REVIEWED: rpng_save_image() filter process issues
@@ -99,7 +98,7 @@
 *
 *   LICENSE: zlib/libpng
 *
-*   Copyright (c) 2020-2022 Ramon Santamaria (@raysan5)
+*   Copyright (c) 2020-2023 Ramon Santamaria (@raysan5)
 *
 *   This software is provided "as-is", without any express or implied warranty. In no event
 *   will the authors be held liable for any damages arising from the use of this software.
