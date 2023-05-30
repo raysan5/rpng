@@ -1,17 +1,17 @@
 /**********************************************************************************************
 *
-*   rpng v1.0 - A simple and easy-to-use library to manage png chunks
+*   rpng v1.1 - A simple and easy-to-use library to manage png chunks
 *
 *   FEATURES:
 *       - Load/Save PNG images from/to raw image data
 *       - Count/read/write/remove png chunks
-*       - Operate on file or file-buffer
+*       - Operate on file or memory buffer
 *       - Chunks data abstraction
 *       - Add custom chunks
 *
 *   LIMITATIONS:
-*       - No Indexed color type supported
-*       - No Grayscale color type with 1/2/4 bits (1 channel), only 8/16 bits
+*       - No indexed color type supported (PLTE)
+*       - No grayscale color type with 1/2/4 bits (1 channel), only 8/16 bits
 *
 *   POSSIBLE IMPROVEMENTS:
 *       - Support error return codes, not only errors logging
@@ -21,12 +21,13 @@
 *           Generates the implementation of the library into the included file.
 *           If not defined, the library is in header only mode and can be included in other headers
 *           or source files without problems. But only ONE file should hold the implementation.
-*   
+*
 *       #define RPNG_DEFLATE_IMPLEMENTATION
 *           Include sdefl/sinfl deflate implementation with rpng
-*   
+*
 *       #define RPNG_NO_STDIO
 *           Do not include FILE I/O API, only read/write from memory buffers
+*
 * 
 *   DEPENDENCIES: libc (C standard library)
 *       stdlib.h        Required for: malloc(), calloc(), free()
@@ -87,6 +88,7 @@
 *       Comment          Miscellaneous comment; conversion from GIF comment
 *
 *   VERSIONS HISTORY:
+*       1.1 (29-May-2023) UPDATED: sdefl and sinfl, fixed issue
 *       1.0 (24-Dec-2021) ADDED: rpng_load_image()
 *                         ADDED: RPNG_LOG() macro
 *                         REVIEWED: rpng_save_image() filter process issues
@@ -490,10 +492,9 @@ struct sdefl {
     struct sdefl_freq freq;
     struct sdefl_codes cod;
 };
-
 extern int sdefl_bound(int in_len);
-extern int sdeflate(struct sdefl* s, void* o, const void* i, int n, int lvl);
-extern int zsdeflate(struct sdefl* s, void* o, const void* i, int n, int lvl);
+extern int sdeflate(struct sdefl *s, void *o, const void *i, int n, int lvl);
+extern int zsdeflate(struct sdefl *s, void *o, const void *i, int n, int lvl);
 
 //=========================================================================
 //                           SINFL
@@ -1258,8 +1259,8 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
     // Image data pre-processing to append filter type byte to every scanline
     int pixel_size = color_channels*(bit_depth/8);
     int scanline_size = width*pixel_size;
-    unsigned int data_size_filtered = (scanline_size + 1)*height;   // Adding 1 byte per scanline filter
-    unsigned char *data_filtered = (unsigned char *)RPNG_CALLOC(data_size_filtered, 1);
+    unsigned int data_filtered_size = (scanline_size + 1)*height;   // Adding 1 byte per scanline filter
+    unsigned char *data_filtered = (unsigned char *)RPNG_CALLOC(data_filtered_size, 1);
     
     int out = 0, x = 0, a = 0, b = 0, c = 0;
     int sum_value[5] = { 0 };
@@ -1340,14 +1341,13 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
 
     // Compress filtered image data and generate a valid zlib stream
     struct sdefl *sde = RPNG_CALLOC(sizeof(struct sdefl), 1);
-    int bounds = sdefl_bound(data_size_filtered);
+    int bounds = sdefl_bound(data_filtered_size);
     unsigned char *comp_data = (unsigned char *)RPNG_CALLOC(bounds, 1);
-    int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_size_filtered, 8);   // Compression level 8, same as stbwi
-    
-    RPNG_FREE(sde);
+    int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_filtered_size, 8);   // Compression level 8, same as stbwi
     RPNG_FREE(data_filtered);
+    RPNG_FREE(sde);
     
-    RPNG_LOG("Data size: %i -> Comp data size: %i\n", data_size_filtered, comp_data_size);
+    RPNG_LOG("Data size: %i -> Comp data size: %i\n", data_filtered_size, comp_data_size);
     
     // Security check to verify compression worked
     if (comp_data_size > 0)
@@ -1968,16 +1968,16 @@ static bool file_exists(const char *filename)
 #include <string.h> /* memcpy */
 #include <limits.h> /* CHAR_BIT */
 
-#define SDEFL_NIL               (-1)
-#define SDEFL_MAX_MATCH         258
-#define SDEFL_MAX_CODE_LEN      (15)
-#define SDEFL_SYM_BITS          (10u)
-#define SDEFL_SYM_MSK           ((1u << SDEFL_SYM_BITS)-1u)
-#define SDEFL_LIT_LEN_CODES     (14)
-#define SDEFL_OFF_CODES         (15)
-#define SDEFL_PRE_CODES         (7)
-#define SDEFL_CNT_NUM(n)        ((((n)+3u/4u)+3u)&~3u)
-#define SDEFL_EOB               (256)
+#define SDEFL_NIL                       (-1)
+#define SDEFL_MAX_MATCH                 258
+#define SDEFL_MAX_CODE_LEN              (15)
+#define SDEFL_SYM_BITS                  (10u)
+#define SDEFL_SYM_MSK                   ((1u << SDEFL_SYM_BITS)-1u)
+#define SDEFL_LIT_LEN_CODES             (14)
+#define SDEFL_OFF_CODES                 (15)
+#define SDEFL_PRE_CODES                 (7)
+#define SDEFL_CNT_NUM(n)                ((((n)+3u/4u)+3u)&~3u)
+#define SDEFL_EOB                       (256)
 
 #define sdefl_npow2(n) (1 << (sdefl_ilog2((n)-1) + 1))
 
@@ -1991,38 +1991,37 @@ sdefl_ilog2(int n) {
 #elif defined(__GNUC__) || defined(__clang__)
     return (int)sizeof(unsigned long) * CHAR_BIT - 1 - __builtin_clzl((unsigned long)n);
 #else
-#define lt(n) n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n
+    #define lt(n) n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n
     static const char tbl[256] = {
-      0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,lt(4), lt(5), lt(5), lt(6), lt(6), lt(6), lt(6),
-      lt(7), lt(7), lt(7), lt(7), lt(7), lt(7), lt(7), lt(7) };
+        0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,lt(4), lt(5), lt(5), lt(6), lt(6), lt(6), lt(6),
+        lt(7), lt(7), lt(7), lt(7), lt(7), lt(7), lt(7), lt(7)};
     int tt, t;
     if ((tt = (n >> 16))) {
         return (t = (tt >> 8)) ? 24 + tbl[t] : 16 + tbl[tt];
-    }
-    else {
+    } else {
         return (t = (n >> 8)) ? 8 + tbl[t] : tbl[n];
     }
-#undef lt
+    #undef lt
 #endif
 }
 static unsigned
-sdefl_uload32(const void* p) {
+sdefl_uload32(const void *p) {
     /* hopefully will be optimized to an unaligned read */
     unsigned n = 0;
     memcpy(&n, p, sizeof(n));
     return n;
 }
 static unsigned
-sdefl_hash32(const void* p) {
+sdefl_hash32(const void *p) {
     unsigned n = sdefl_uload32(p);
     return (n * 0x9E377989) >> (32 - SDEFL_HASH_BITS);
 }
 static void
-sdefl_put(unsigned char** dst, struct sdefl* s, int code, int bitcnt) {
+sdefl_put(unsigned char **dst, struct sdefl *s, int code, int bitcnt) {
     s->bits |= (code << s->bitcnt);
     s->bitcnt += bitcnt;
     while (s->bitcnt >= 8) {
-        unsigned char* tar = *dst;
+        unsigned char *tar = *dst;
         *tar = (unsigned char)(s->bits & 0xFF);
         s->bits >>= 8;
         s->bitcnt -= 8;
@@ -2041,13 +2040,13 @@ sdefl_heap_sub(unsigned A[], unsigned len, unsigned sub) {
     A[p] = v;
 }
 static void
-sdefl_heap_array(unsigned* A, unsigned len) {
+sdefl_heap_array(unsigned *A, unsigned len) {
     unsigned sub;
     for (sub = len >> 1; sub >= 1; sub--)
         sdefl_heap_sub(A, len, sub);
 }
 static void
-sdefl_heap_sort(unsigned* A, unsigned n) {
+sdefl_heap_sort(unsigned *A, unsigned n) {
     A--;
     sdefl_heap_array(A, n);
     while (n >= 2) {
@@ -2058,14 +2057,14 @@ sdefl_heap_sort(unsigned* A, unsigned n) {
     }
 }
 static unsigned
-sdefl_sort_sym(unsigned sym_cnt, unsigned* freqs,
-    unsigned char* lens, unsigned* sym_out) {
-    unsigned cnts[SDEFL_CNT_NUM(SDEFL_SYM_MAX)] = { 0 };
+sdefl_sort_sym(unsigned sym_cnt, unsigned *freqs,
+                             unsigned char *lens, unsigned *sym_out) {
+    unsigned cnts[SDEFL_CNT_NUM(SDEFL_SYM_MAX)] = {0};
     unsigned cnt_num = SDEFL_CNT_NUM(sym_cnt);
     unsigned used_sym = 0;
     unsigned sym, i;
     for (sym = 0; sym < sym_cnt; sym++)
-        cnts[freqs[sym] < cnt_num-1 ? freqs[sym] : cnt_num-1]++;
+        cnts[freqs[sym] < cnt_num-1 ? freqs[sym]: cnt_num-1]++;
     for (i = 1; i < cnt_num; i++) {
         unsigned cnt = cnts[i];
         cnts[i] = used_sym;
@@ -2074,16 +2073,15 @@ sdefl_sort_sym(unsigned sym_cnt, unsigned* freqs,
     for (sym = 0; sym < sym_cnt; sym++) {
         unsigned freq = freqs[sym];
         if (freq) {
-            unsigned idx = freq < cnt_num-1 ? freq : cnt_num-1;
-            sym_out[cnts[idx]++] = sym | (freq << SDEFL_SYM_BITS);
-        }
-        else lens[sym] = 0;
+                unsigned idx = freq < cnt_num-1 ? freq : cnt_num-1;
+                sym_out[cnts[idx]++] = sym | (freq << SDEFL_SYM_BITS);
+        } else lens[sym] = 0;
     }
     sdefl_heap_sort(sym_out + cnts[cnt_num-2], cnts[cnt_num-1] - cnts[cnt_num-2]);
     return used_sym;
 }
 static void
-sdefl_build_tree(unsigned* A, unsigned sym_cnt) {
+sdefl_build_tree(unsigned *A, unsigned sym_cnt) {
     unsigned i = 0, b = 0, e = 0;
     do {
         unsigned m, n, freq_shift;
@@ -2101,8 +2099,8 @@ sdefl_build_tree(unsigned* A, unsigned sym_cnt) {
     } while (sym_cnt - ++e > 1);
 }
 static void
-sdefl_gen_len_cnt(unsigned* A, unsigned root, unsigned* len_cnt,
-    unsigned max_code_len) {
+sdefl_gen_len_cnt(unsigned *A, unsigned root, unsigned *len_cnt,
+                                    unsigned max_code_len) {
     int n;
     unsigned i;
     for (i = 0; i <= max_code_len; i++)
@@ -2126,8 +2124,8 @@ sdefl_gen_len_cnt(unsigned* A, unsigned root, unsigned* len_cnt,
     }
 }
 static void
-sdefl_gen_codes(unsigned* A, unsigned char* lens, const unsigned* len_cnt,
-    unsigned max_code_word_len, unsigned sym_cnt) {
+sdefl_gen_codes(unsigned *A, unsigned char *lens, const unsigned *len_cnt,
+                                unsigned max_code_word_len, unsigned sym_cnt) {
     unsigned i, sym, len, nxt[SDEFL_MAX_CODE_LEN + 1];
     for (i = 0, len = max_code_word_len; len >= 1; len--) {
         unsigned cnt = len_cnt[len];
@@ -2148,9 +2146,9 @@ sdefl_rev(unsigned c, unsigned char n) {
     return c >> (16-n);
 }
 static void
-sdefl_huff(unsigned char* lens, unsigned* codes, unsigned* freqs,
-    unsigned num_syms, unsigned max_code_len) {
-    unsigned c, * A = codes;
+sdefl_huff(unsigned char *lens, unsigned *codes, unsigned *freqs,
+                     unsigned num_syms, unsigned max_code_len) {
+    unsigned c, *A = codes;
     unsigned len_cnt[SDEFL_MAX_CODE_LEN + 1];
     unsigned used_syms = sdefl_sort_sym(num_syms, freqs, lens, A);
     if (!used_syms) return;
@@ -2174,9 +2172,9 @@ struct sdefl_symcnt {
     int off;
 };
 static void
-sdefl_precode(struct sdefl_symcnt* cnt, unsigned* freqs, unsigned* items,
-    const unsigned char* litlen, const unsigned char* offlen) {
-    unsigned* at = items;
+sdefl_precode(struct sdefl_symcnt *cnt, unsigned *freqs, unsigned *items,
+                            const unsigned char *litlen, const unsigned char *offlen) {
+    unsigned *at = items;
     unsigned run_start = 0;
 
     unsigned total = 0;
@@ -2196,20 +2194,19 @@ sdefl_precode(struct sdefl_symcnt* cnt, unsigned* freqs, unsigned* items,
         if (!len) {
             while ((run_end - run_start) >= 11) {
                 unsigned n = (run_end - run_start) - 11;
-                unsigned xbits = n < 0x7f ? n : 0x7f;
+                unsigned xbits =    n < 0x7f ? n : 0x7f;
                 freqs[18]++;
                 *at++ = 18u | (xbits << 5u);
                 run_start += 11 + xbits;
             }
             if ((run_end - run_start) >= 3) {
                 unsigned n = (run_end - run_start) - 3;
-                unsigned xbits = n < 0x7 ? n : 0x7;
+                unsigned xbits =    n < 0x7 ? n : 0x7;
                 freqs[17]++;
                 *at++ = 17u | (xbits << 5u);
                 run_start += 3 + xbits;
             }
-        }
-        else if ((run_end - run_start) >= 4) {
+        } else if ((run_end - run_start) >= 4) {
             freqs[len]++;
             *at++ = len;
             run_start++;
@@ -2234,37 +2231,41 @@ struct sdefl_match_codes {
     int dc, dx;
 };
 static void
-sdefl_match_codes(struct sdefl_match_codes* cod, int dist, int len) {
-    static const short dxmax[] = { 0,6,12,24,48,96,192,384,768,1536,3072,6144,12288,24576 };
+sdefl_match_codes(struct sdefl_match_codes *cod, int dist, int len) {
+    static const short dxmax[] = {0,6,12,24,48,96,192,384,768,1536,3072,6144,12288,24576};
     static const unsigned char lslot[258+1] = {
-      0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 12,
-      12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15, 16, 16, 16, 16, 16,
-      16, 16, 16, 17, 17, 17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 18, 18,
-      18, 19, 19, 19, 19, 19, 19, 19, 19, 20, 20, 20, 20, 20, 20, 20, 20, 20,
-      20, 20, 20, 20, 20, 20, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21,
-      21, 21, 21, 21, 21, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
-      22, 22, 22, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
-      23, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 26, 26, 26, 26, 26, 26, 26,
-      26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
-      26, 26, 26, 26, 26, 26, 26, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
-      27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
-      27, 27, 28
+        0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 12,
+        12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15, 16, 16, 16, 16, 16,
+        16, 16, 16, 17, 17, 17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 18, 18,
+        18, 19, 19, 19, 19, 19, 19, 19, 19, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+        20, 20, 20, 20, 20, 20, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21,
+        21, 21, 21, 21, 21, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+        22, 22, 22, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+        23, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+        24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 25, 25, 25,
+        25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
+        25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 26, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 26, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
+        27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
+        27, 27, 28
     };
+    assert(len <= 258);
+    assert(dist <= 32768);
     cod->ls = lslot[len];
     cod->lc = 257 + cod->ls;
+    assert(cod->lc <= 285);
+
     cod->dx = sdefl_ilog2(sdefl_npow2(dist) >> 2);
     cod->dc = cod->dx ? ((cod->dx + 1) << 1) + (dist > dxmax[cod->dx]) : dist-1;
 }
 static void
-sdefl_match(unsigned char** dst, struct sdefl* s, int dist, int len) {
-    static const char lxn[] = { 0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0 };
-    static const short lmin[] = { 3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,
-        51,59,67,83,99,115,131,163,195,227,258 };
-    static const short dmin[] = { 1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,
-        385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577 };
+sdefl_match(unsigned char **dst, struct sdefl *s, int dist, int len) {
+    static const char lxn[] = {0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0};
+    static const short lmin[] = {3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,
+            51,59,67,83,99,115,131,163,195,227,258};
+    static const short dmin[] = {1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,
+            385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577};
 
     struct sdefl_match_codes cod;
     sdefl_match_codes(&cod, dist, len);
@@ -2274,16 +2275,16 @@ sdefl_match(unsigned char** dst, struct sdefl* s, int dist, int len) {
     sdefl_put(dst, s, dist - dmin[cod.dc], cod.dx);
 }
 static void
-sdefl_flush(unsigned char** dst, struct sdefl* s, int is_last,
-    const unsigned char* in) {
+sdefl_flush(unsigned char **dst, struct sdefl *s, int is_last,
+                        const unsigned char *in) {
     int j, i = 0, item_cnt = 0;
-    struct sdefl_symcnt symcnt = { 0 };
+    struct sdefl_symcnt symcnt = {0};
     unsigned codes[SDEFL_PRE_MAX];
     unsigned char lens[SDEFL_PRE_MAX];
-    unsigned freqs[SDEFL_PRE_MAX] = { 0 };
+    unsigned freqs[SDEFL_PRE_MAX] = {0};
     unsigned items[SDEFL_SYM_MAX + SDEFL_OFF_MAX];
-    static const unsigned char perm[SDEFL_PRE_MAX] = { 16,17,18,0,8,7,9,6,10,5,11,
-        4,12,3,13,2,14,1,15 };
+    static const unsigned char perm[SDEFL_PRE_MAX] = {16,17,18,0,8,7,9,6,10,5,11,
+            4,12,3,13,2,14,1,15};
 
     /* huffman codes */
     s->freq.lit[SDEFL_EOB]++;
@@ -2292,7 +2293,9 @@ sdefl_flush(unsigned char** dst, struct sdefl* s, int is_last,
     sdefl_precode(&symcnt, freqs, items, s->cod.len.lit, s->cod.len.off);
     sdefl_huff(lens, codes, freqs, SDEFL_PRE_MAX, SDEFL_PRE_CODES);
     for (item_cnt = SDEFL_PRE_MAX; item_cnt > 4; item_cnt--) {
-        if (lens[perm[item_cnt - 1]]) break;
+        if (lens[perm[item_cnt - 1]]){
+            break;
+        }
     }
     /* block header */
     sdefl_put(dst, s, is_last ? 0x01 : 0x00, 1); /* block */
@@ -2300,38 +2303,41 @@ sdefl_flush(unsigned char** dst, struct sdefl* s, int is_last,
     sdefl_put(dst, s, symcnt.lit - 257, 5);
     sdefl_put(dst, s, symcnt.off - 1, 5);
     sdefl_put(dst, s, item_cnt - 4, 4);
-    for (i = 0; i < item_cnt; ++i)
+    for (i = 0; i < item_cnt; ++i) {
         sdefl_put(dst, s, lens[perm[i]], 3);
+    }
     for (i = 0; i < symcnt.items; ++i) {
         unsigned sym = items[i] & 0x1F;
         sdefl_put(dst, s, (int)codes[sym], lens[sym]);
         if (sym < 16) continue;
         if (sym == 16) sdefl_put(dst, s, items[i] >> 5, 2);
-        else if (sym == 17) sdefl_put(dst, s, items[i] >> 5, 3);
+        else if(sym == 17) sdefl_put(dst, s, items[i] >> 5, 3);
         else sdefl_put(dst, s, items[i] >> 5, 7);
     }
     /* block sequences */
     for (i = 0; i < s->seq_cnt; ++i) {
-        if (s->seq[i].off >= 0)
+        if (s->seq[i].off >= 0) {
             for (j = 0; j < s->seq[i].len; ++j) {
                 int c = in[s->seq[i].off + j];
                 sdefl_put(dst, s, (int)s->cod.word.lit[c], s->cod.len.lit[c]);
             }
-        else sdefl_match(dst, s, -s->seq[i].off, s->seq[i].len);
+        } else {
+            sdefl_match(dst, s, -s->seq[i].off, s->seq[i].len);
+        }
     }
     sdefl_put(dst, s, (int)(s)->cod.word.lit[SDEFL_EOB], (s)->cod.len.lit[SDEFL_EOB]);
     memset(&s->freq, 0, sizeof(s->freq));
     s->seq_cnt = 0;
 }
 static void
-sdefl_seq(struct sdefl* s, int off, int len) {
+sdefl_seq(struct sdefl *s, int off, int len) {
     assert(s->seq_cnt + 2 < SDEFL_SEQ_SIZ);
     s->seq[s->seq_cnt].off = off;
     s->seq[s->seq_cnt].len = len;
     s->seq_cnt++;
 }
 static void
-sdefl_reg_match(struct sdefl* s, int off, int len) {
+sdefl_reg_match(struct sdefl *s, int off, int len) {
     struct sdefl_match_codes cod;
     sdefl_match_codes(&cod, off, len);
     s->freq.lit[cod.lc]++;
@@ -2342,13 +2348,13 @@ struct sdefl_match {
     int len;
 };
 static void
-sdefl_fnd(struct sdefl_match* m, const struct sdefl* s,
-    int chain_len, int max_match, const unsigned char* in, int p) {
+sdefl_fnd(struct sdefl_match *m, const struct sdefl *s,
+                    int chain_len, int max_match, const unsigned char *in, int p) {
     int i = s->tbl[sdefl_hash32(&in[p])];
-    int limit = ((p-SDEFL_WIN_SIZ)<SDEFL_NIL) ? SDEFL_NIL : (p-SDEFL_WIN_SIZ);
+    int limit = ((p-SDEFL_WIN_SIZ)<SDEFL_NIL)?SDEFL_NIL:(p-SDEFL_WIN_SIZ);
     while (i > limit) {
         if (in[i+m->len] == in[p+m->len] &&
-            (sdefl_uload32(&in[i]) == sdefl_uload32(&in[p]))) {
+                (sdefl_uload32(&in[i]) == sdefl_uload32(&in[p]))){
             int n = SDEFL_MIN_MATCH;
             while (n < max_match && in[i+n] == in[p+n]) n++;
             if (n > m->len) {
@@ -2361,27 +2367,27 @@ sdefl_fnd(struct sdefl_match* m, const struct sdefl* s,
     }
 }
 static int
-sdefl_compr(struct sdefl* s, unsigned char* out, const unsigned char* in,
-    int in_len, int lvl) {
-    unsigned char* q = out;
-    static const unsigned char pref[] = { 8,10,14,24,30,48,65,96,130 };
-    int max_chain = (lvl < 8) ? (1 << (lvl + 1)) : (1 << 13);
+sdefl_compr(struct sdefl *s, unsigned char *out, const unsigned char *in,
+                        int in_len, int lvl) {
+    unsigned char *q = out;
+    static const unsigned char pref[] = {8,10,14,24,30,48,65,96,130};
+    int max_chain = (lvl < 8) ? (1 << (lvl + 1)): (1 << 13);
     int n, i = 0, litlen = 0;
     for (n = 0; n < SDEFL_HASH_SIZ; ++n) {
         s->tbl[n] = SDEFL_NIL;
     }
-    do {
-        int blk_end = i + SDEFL_BLK_MAX < in_len ? i + SDEFL_BLK_MAX : in_len;
+    do {int blk_end = ((i + SDEFL_BLK_MAX) < in_len) ? (i + SDEFL_BLK_MAX) : in_len;
         while (i < blk_end) {
-            struct sdefl_match m = { 0 };
-            int max_match = ((in_len-i)>SDEFL_MAX_MATCH) ? SDEFL_MAX_MATCH : (in_len-i);
+            struct sdefl_match m = {0};
+            int left = blk_end - i;
+            int max_match = (left >= SDEFL_MAX_MATCH) ? SDEFL_MAX_MATCH : left;
             int nice_match = pref[lvl] < max_match ? pref[lvl] : max_match;
-            int run = 1, inc = 1, run_inc;
+            int run = 1, inc = 1, run_inc = 0;
             if (max_match > SDEFL_MIN_MATCH) {
                 sdefl_fnd(&m, s, max_chain, max_match, in, i);
             }
-            if (lvl >= 5 && m.len >= SDEFL_MIN_MATCH && m.len < nice_match) {
-                struct sdefl_match m2 = { 0 };
+            if (lvl >= 5 && m.len >= SDEFL_MIN_MATCH && m.len < nice_match){
+                struct sdefl_match m2 = {0};
                 sdefl_fnd(&m2, s, max_chain, m.len+1, in, i+1);
                 m.len = (m2.len > m.len) ? 0 : m.len;
             }
@@ -2394,12 +2400,10 @@ sdefl_compr(struct sdefl* s, unsigned char* out, const unsigned char* in,
                 sdefl_reg_match(s, m.off, m.len);
                 if (lvl < 2 && m.len >= nice_match) {
                     inc = m.len;
-                }
-                else {
+                } else {
                     run = m.len;
                 }
-            }
-            else {
+            } else {
                 s->freq.lit[in[i]]++;
                 litlen++;
             }
@@ -2409,10 +2413,11 @@ sdefl_compr(struct sdefl* s, unsigned char* out, const unsigned char* in,
                     unsigned h = sdefl_hash32(&in[i]);
                     s->prv[i&SDEFL_WIN_MSK] = s->tbl[h];
                     s->tbl[h] = i, i += inc;
+                    assert(i <= blk_end);
                 }
-            }
-            else {
+            } else {
                 i += run_inc;
+                assert(i <= blk_end);
             }
         }
         if (litlen) {
@@ -2422,18 +2427,19 @@ sdefl_compr(struct sdefl* s, unsigned char* out, const unsigned char* in,
         sdefl_flush(&q, s, blk_end == in_len, in);
     } while (i < in_len);
 
-    if (s->bitcnt)
+    if (s->bitcnt > 0)
         sdefl_put(&q, s, 0x00, 8 - s->bitcnt);
+
     return (int)(q - out);
 }
 extern int
-sdeflate(struct sdefl* s, void* out, const void* in, int n, int lvl) {
+sdeflate(struct sdefl *s, void *out, const void *in, int n, int lvl) {
     s->bits = s->bitcnt = 0;
     return sdefl_compr(s, (unsigned char*)out, (const unsigned char*)in, n, lvl);
 }
 static unsigned
-sdefl_adler32(unsigned adler32, const unsigned char* in, int in_len) {
-#define SDEFL_ADLER_INIT (1)
+sdefl_adler32(unsigned adler32, const unsigned char *in, int in_len) {
+    #define SDEFL_ADLER_INIT (1)
     const unsigned ADLER_MOD = 65521;
     unsigned s1 = adler32 & 0xffff;
     unsigned s2 = adler32 >> 16;
@@ -2463,10 +2469,10 @@ sdefl_adler32(unsigned adler32, const unsigned char* in, int in_len) {
     return (unsigned)(s2 << 16) + (unsigned)s1;
 }
 extern int
-zsdeflate(struct sdefl* s, void* out, const void* in, int n, int lvl) {
+zsdeflate(struct sdefl *s, void *out, const void *in, int n, int lvl) {
     int p = 0;
     unsigned a = 0;
-    unsigned char* q = (unsigned char*)out;
+    unsigned char *q = (unsigned char*)out;
 
     s->bits = s->bitcnt = 0;
     sdefl_put(&q, s, 0x78, 8); /* deflate, 32k window */
@@ -2487,6 +2493,7 @@ sdefl_bound(int len) {
     int b = 128 + len + ((len / (31 * 1024)) + 1) * 5;
     return (a > b) ? a : b;
 }
+
 #endif /* SDEFL_IMPLEMENTATION */
 
 //=========================================================================
@@ -2499,28 +2506,28 @@ sdefl_bound(int len) {
 #include <assert.h> /* assert */
 
 #if defined(__GNUC__) || defined(__clang__)
-#define sinfl_likely(x)       __builtin_expect((x),1)
-#define sinfl_unlikely(x)     __builtin_expect((x),0)
+#define sinfl_likely(x)         __builtin_expect((x),1)
+#define sinfl_unlikely(x)       __builtin_expect((x),0)
 #else
-#define sinfl_likely(x)       (x)
-#define sinfl_unlikely(x)     (x)
+#define sinfl_likely(x)         (x)
+#define sinfl_unlikely(x)       (x)
 #endif
 
 #ifndef SINFL_NO_SIMD
 #if defined(__x86_64__) || defined(_WIN32) || defined(_WIN64)
-#include <emmintrin.h>
-#define sinfl_char16 __m128i
-#define sinfl_char16_ld(p) _mm_loadu_si128((const __m128i *)(void*)(p))
-#define sinfl_char16_str(d,v)  _mm_storeu_si128((__m128i*)(void*)(d), v)
-#define sinfl_char16_char(c) _mm_set1_epi8(c)
+    #include <emmintrin.h>
+    #define sinfl_char16 __m128i
+    #define sinfl_char16_ld(p) _mm_loadu_si128((const __m128i *)(void*)(p))
+    #define sinfl_char16_str(d,v)    _mm_storeu_si128((__m128i*)(void*)(d), v)
+    #define sinfl_char16_char(c) _mm_set1_epi8(c)
 #elif defined(__arm__) || defined(__aarch64__)
-#include <arm_neon.h>
-#define sinfl_char16 uint8x16_t
-#define sinfl_char16_ld(p) vld1q_u8((const unsigned char*)(p))
-#define sinfl_char16_str(d,v) vst1q_u8((unsigned char*)(d), v)
-#define sinfl_char16_char(c) vdupq_n_u8(c)
+    #include <arm_neon.h>
+    #define sinfl_char16 uint8x16_t
+    #define sinfl_char16_ld(p) vld1q_u8((const unsigned char*)(p))
+    #define sinfl_char16_str(d,v) vst1q_u8((unsigned char*)(d), v)
+    #define sinfl_char16_char(c) vdupq_n_u8(c)
 #else
-#define SINFL_NO_SIMD
+    #define SINFL_NO_SIMD
 #endif
 #endif
 
@@ -2534,62 +2541,62 @@ sinfl_bsr(unsigned n) {
 #endif
 }
 static unsigned long long
-sinfl_read64(const void* p) {
+sinfl_read64(const void *p) {
     unsigned long long n;
     memcpy(&n, p, 8);
     return n;
 }
 static void
-sinfl_copy64(unsigned char** dst, unsigned char** src) {
+sinfl_copy64(unsigned char **dst, unsigned char **src) {
     unsigned long long n;
     memcpy(&n, *src, 8);
     memcpy(*dst, &n, 8);
-    *dst += 8, * src += 8;
+    *dst += 8, *src += 8;
 }
 static unsigned char*
-sinfl_write64(unsigned char* dst, unsigned long long w) {
+sinfl_write64(unsigned char *dst, unsigned long long w) {
     memcpy(dst, &w, 8);
     return dst + 8;
 }
 #ifndef SINFL_NO_SIMD
 static unsigned char*
-sinfl_write128(unsigned char* dst, sinfl_char16 w) {
+sinfl_write128(unsigned char *dst, sinfl_char16 w) {
     sinfl_char16_str(dst, w);
     return dst + 8;
 }
 static void
-sinfl_copy128(unsigned char** dst, unsigned char** src) {
+sinfl_copy128(unsigned char **dst, unsigned char **src) {
     sinfl_char16 n = sinfl_char16_ld(*src);
     sinfl_char16_str(*dst, n);
-    *dst += 16, * src += 16;
+    *dst += 16, *src += 16;
 }
 #endif
 static void
-sinfl_refill(struct sinfl* s) {
+sinfl_refill(struct sinfl *s) {
     s->bitbuf |= sinfl_read64(s->bitptr) << s->bitcnt;
     s->bitptr += (63 - s->bitcnt) >> 3;
     s->bitcnt |= 56; /* bitcount in range [56,63] */
 }
 static int
-sinfl_peek(struct sinfl* s, int cnt) {
+sinfl_peek(struct sinfl *s, int cnt) {
     assert(cnt >= 0 && cnt <= 56);
     assert(cnt <= s->bitcnt);
     return s->bitbuf & ((1ull << cnt) - 1);
 }
 static void
-sinfl_consume(struct sinfl* s, int cnt) {
+sinfl_eat(struct sinfl *s, int cnt) {
     assert(cnt <= s->bitcnt);
     s->bitbuf >>= cnt;
     s->bitcnt -= cnt;
 }
 static int
-sinfl__get(struct sinfl* s, int cnt) {
+sinfl__get(struct sinfl *s, int cnt) {
     int res = sinfl_peek(s, cnt);
-    sinfl_consume(s, cnt);
+    sinfl_eat(s, cnt);
     return res;
 }
 static int
-sinfl_get(struct sinfl* s, int cnt) {
+sinfl_get(struct sinfl *s, int cnt) {
     sinfl_refill(s);
     return sinfl__get(s, cnt);
 }
@@ -2600,16 +2607,15 @@ struct sinfl_gen {
     short* sorted;
 };
 static int
-sinfl_build_tbl(struct sinfl_gen* gen, unsigned* tbl, int tbl_bits,
-    const int* cnt) {
+sinfl_build_tbl(struct sinfl_gen *gen, unsigned *tbl, int tbl_bits,
+                                const int *cnt) {
     int tbl_end = 0;
     while (!(gen->cnt = cnt[gen->len])) {
         ++gen->len;
     }
     tbl_end = 1 << gen->len;
     while (gen->len <= tbl_bits) {
-        do {
-            unsigned bit = 0;
+        do {unsigned bit = 0;
             tbl[gen->word] = (*gen->sorted++ << 16) | gen->len;
             if (gen->word == tbl_end - 1) {
                 for (; gen->len < tbl_bits; gen->len++) {
@@ -2632,8 +2638,8 @@ sinfl_build_tbl(struct sinfl_gen* gen, unsigned* tbl, int tbl_bits,
     return 0;
 }
 static void
-sinfl_build_subtbl(struct sinfl_gen* gen, unsigned* tbl, int tbl_bits,
-    const int* cnt) {
+sinfl_build_subtbl(struct sinfl_gen *gen, unsigned *tbl, int tbl_bits,
+                                     const int *cnt) {
     int sub_bits = 0;
     int sub_start = 0;
     int sub_prefix = -1;
@@ -2641,7 +2647,7 @@ sinfl_build_subtbl(struct sinfl_gen* gen, unsigned* tbl, int tbl_bits,
     while (1) {
         unsigned entry;
         int bit, stride, i;
-        /* start new subtable */
+        /* start new sub-table */
         if ((gen->word & ((1 << tbl_bits)-1)) != sub_prefix) {
             int used = 0;
             sub_prefix = gen->word & ((1 << tbl_bits)-1);
@@ -2655,7 +2661,7 @@ sinfl_build_subtbl(struct sinfl_gen* gen, unsigned* tbl, int tbl_bits,
             tbl_end = sub_start + (1 << sub_bits);
             tbl[sub_prefix] = (sub_start << 16) | 0x10 | (sub_bits & 0xf);
         }
-        /* fill subtable */
+        /* fill sub-table */
         entry = (*gen->sorted << 16) | ((gen->len - tbl_bits) & 0xf);
         gen->sorted++;
         i = sub_start + (gen->word >> tbl_bits);
@@ -2677,12 +2683,12 @@ sinfl_build_subtbl(struct sinfl_gen* gen, unsigned* tbl, int tbl_bits,
     }
 }
 static void
-sinfl_build(unsigned* tbl, unsigned char* lens, int tbl_bits, int maxlen,
-    int symcnt) {
+sinfl_build(unsigned *tbl, unsigned char *lens, int tbl_bits, int maxlen,
+                        int symcnt) {
     int i, used = 0;
     short sort[288];
-    int cnt[16] = { 0 }, off[16] = { 0 };
-    struct sinfl_gen gen = { 0 };
+    int cnt[16] = {0}, off[16]= {0};
+    struct sinfl_gen gen = {0};
     gen.sorted = sort;
     gen.len = 1;
 
@@ -2698,46 +2704,46 @@ sinfl_build(unsigned* tbl, unsigned char* lens, int tbl_bits, int maxlen,
         gen.sorted[off[lens[i]]++] = (short)i;
     gen.sorted += off[0];
 
-    if (used < (1 << maxlen)) {
+    if (used < (1 << maxlen)){
         for (i = 0; i < 1 << tbl_bits; ++i)
             tbl[i] = (0 << 16u) | 1;
         return;
     }
-    if (!sinfl_build_tbl(&gen, tbl, tbl_bits, cnt)) {
+    if (!sinfl_build_tbl(&gen, tbl, tbl_bits, cnt)){
         sinfl_build_subtbl(&gen, tbl, tbl_bits, cnt);
     }
 }
 static int
-sinfl_decode(struct sinfl* s, const unsigned* tbl, int bit_len) {
-    {int idx = sinfl_peek(s, bit_len);
+sinfl_decode(struct sinfl *s, const unsigned *tbl, int bit_len) {
+    int idx = sinfl_peek(s, bit_len);
     unsigned key = tbl[idx];
     if (key & 0x10) {
         /* sub-table lookup */
         int len = key & 0x0f;
-        sinfl_consume(s, bit_len);
+        sinfl_eat(s, bit_len);
         idx = sinfl_peek(s, len);
         key = tbl[((key >> 16) & 0xffff) + (unsigned)idx];
     }
-    sinfl_consume(s, key & 0x0f);
-    return (key >> 16) & 0x0fff; }
+    sinfl_eat(s, key & 0x0f);
+    return (key >> 16) & 0x0fff;
 }
 static int
-sinfl_decompress(unsigned char* out, int cap, const unsigned char* in, int size) {
-    static const unsigned char order[] = { 16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15 };
-    static const short dbase[30+2] = { 1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,
-        257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577 };
-    static const unsigned char dbits[30+2] = { 0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,
-        10,10,11,11,12,12,13,13,0,0 };
-    static const short lbase[29+2] = { 3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,
-        43,51,59,67,83,99,115,131,163,195,227,258,0,0 };
-    static const unsigned char lbits[29+2] = { 0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,
-        4,4,4,5,5,5,5,0,0,0 };
+sinfl_decompress(unsigned char *out, int cap, const unsigned char *in, int size) {
+    static const unsigned char order[] = {16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15};
+    static const short dbase[30+2] = {1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,
+            257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577};
+    static const unsigned char dbits[30+2] = {0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,
+            10,10,11,11,12,12,13,13,0,0};
+    static const short lbase[29+2] = {3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,
+            43,51,59,67,83,99,115,131,163,195,227,258,0,0};
+    static const unsigned char lbits[29+2] = {0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,
+            4,4,4,5,5,5,5,0,0,0};
 
-    const unsigned char* oe = out + cap;
-    const unsigned char* e = in + size, * o = out;
-    enum sinfl_states { hdr, stored, fixed, dyn, blk };
+    const unsigned char *oe = out + cap;
+    const unsigned char *e = in + size, *o = out;
+    enum sinfl_states {hdr,stored,fixed,dyn,blk};
     enum sinfl_states state = hdr;
-    struct sinfl s = { 0 };
+    struct sinfl s = {0};
     int last = 0;
 
     s.bitptr = in;
@@ -2747,23 +2753,21 @@ sinfl_decompress(unsigned char* out, int cap, const unsigned char* in, int size)
             /* block header */
             int type = 0;
             sinfl_refill(&s);
-            last = sinfl__get(&s, 1);
-            type = sinfl__get(&s, 2);
+            last = sinfl__get(&s,1);
+            type = sinfl__get(&s,2);
 
-            switch (type) {
-            default: return (int)(out-o);
+            switch (type) {default: return (int)(out-o);
             case 0x00: state = stored; break;
             case 0x01: state = fixed; break;
-            case 0x02: state = dyn; break;
-            }
+            case 0x02: state = dyn; break;}
         } break;
         case stored: {
             /* uncompressed block */
             int len, nlen;
             sinfl_refill(&s);
-            sinfl__get(&s, s.bitcnt & 7);
-            len = sinfl__get(&s, 16);
-            nlen = sinfl__get(&s, 16);
+            sinfl__get(&s,s.bitcnt & 7);
+            len = sinfl__get(&s,16);
+            nlen = sinfl__get(&s,16);
             in -= 2; s.bitcnt = 0;
 
             if (len > (e-in) || !len)
@@ -2790,31 +2794,29 @@ sinfl_decompress(unsigned char* out, int cap, const unsigned char* in, int size)
             /* dynamic huffman codes */
             int n, i;
             unsigned hlens[SINFL_PRE_TBL_SIZE];
-            unsigned char nlens[19] = { 0 }, lens[288+32];
+            unsigned char nlens[19] = {0}, lens[288+32];
 
             sinfl_refill(&s);
-            {int nlit = 257 + sinfl__get(&s, 5);
-            int ndist = 1 + sinfl__get(&s, 5);
-            int nlen = 4 + sinfl__get(&s, 4);
+            {int nlit = 257 + sinfl__get(&s,5);
+            int ndist = 1 + sinfl__get(&s,5);
+            int nlen = 4 + sinfl__get(&s,4);
             for (n = 0; n < nlen; n++)
-                nlens[order[n]] = (unsigned char)sinfl_get(&s, 3);
+                nlens[order[n]] = (unsigned char)sinfl_get(&s,3);
             sinfl_build(hlens, nlens, 7, 7, 19);
 
             /* decode code lengths */
             for (n = 0; n < nlit + ndist;) {
                 sinfl_refill(&s);
                 int sym = sinfl_decode(&s, hlens, 7);
-                switch (sym) {
-                default: lens[n++] = (unsigned char)sym; break;
-                case 16: for (i = 3+sinfl_get(&s, 2); i; i--, n++) lens[n] = lens[n-1]; break;
-                case 17: for (i = 3+sinfl_get(&s, 3); i; i--, n++) lens[n] = 0; break;
-                case 18: for (i = 11+sinfl_get(&s, 7); i; i--, n++) lens[n] = 0; break;
-                }
+                switch (sym) {default: lens[n++] = (unsigned char)sym; break;
+                case 16: for (i=3+sinfl_get(&s,2);i;i--,n++) lens[n]=lens[n-1]; break;
+                case 17: for (i=3+sinfl_get(&s,3);i;i--,n++) lens[n]=0; break;
+                case 18: for (i=11+sinfl_get(&s,7);i;i--,n++) lens[n]=0; break;}
             }
             /* build lit/dist tables */
             sinfl_build(s.lits, lens, 10, 15, nlit);
             sinfl_build(s.dsts, lens + nlit, 8, 15, ndist);
-            state = blk; }
+            state = blk;}
         } break;
         case blk: {
             /* decompress block */
@@ -2823,7 +2825,7 @@ sinfl_decompress(unsigned char* out, int cap, const unsigned char* in, int size)
                 int sym = sinfl_decode(&s, s.lits, 10);
                 if (sym < 256) {
                     /* literal */
-                    if (sinfl_unlikely(out + 1 >= oe)) {
+                    if (sinfl_unlikely(out >= oe)) {
                         return (int)(out-o);
                     }
                     *out++ = (unsigned char)sym;
@@ -2840,11 +2842,15 @@ sinfl_decompress(unsigned char* out, int cap, const unsigned char* in, int size)
                     break;
                 }
                 /* match */
+                if (sym >= 286) {
+                    /* length codes 286 and 287 must not appear in compressed data */
+                    return (int)(out-o);
+                }
                 sym -= 257;
                 {int len = sinfl__get(&s, lbits[sym]) + lbase[sym];
                 int dsym = sinfl_decode(&s, s.dsts, 8);
                 int offs = sinfl__get(&s, dbits[dsym]) + dbase[dsym];
-                unsigned char* dst = out, * src = out - offs;
+                unsigned char *dst = out, *src = out - offs;
                 if (sinfl_unlikely(offs > (int)(out-o))) {
                     return (int)(out-o);
                 }
@@ -2858,23 +2864,20 @@ sinfl_decompress(unsigned char* out, int cap, const unsigned char* in, int size)
                         sinfl_copy128(&dst, &src);
                         do sinfl_copy128(&dst, &src);
                         while (dst < out);
-                    }
-                    else if (offs >= 8) {
+                    } else if (offs >= 8) {
                         /* word copy match */
                         sinfl_copy64(&dst, &src);
                         sinfl_copy64(&dst, &src);
                         do sinfl_copy64(&dst, &src);
                         while (dst < out);
-                    }
-                    else if (offs == 1) {
+                    } else if (offs == 1) {
                         /* rle match copying */
                         sinfl_char16 w = sinfl_char16_char(src[0]);
                         dst = sinfl_write128(dst, w);
                         dst = sinfl_write128(dst, w);
                         do dst = sinfl_write128(dst, w);
                         while (dst < out);
-                    }
-                    else {
+                    } else {
                         /* byte copy match */
                         *dst++ = *src++;
                         *dst++ = *src++;
@@ -2890,8 +2893,7 @@ sinfl_decompress(unsigned char* out, int cap, const unsigned char* in, int size)
                         sinfl_copy64(&dst, &src);
                         do sinfl_copy64(&dst, &src);
                         while (dst < out);
-                    }
-                    else if (offs == 1) {
+                    } else if (offs == 1) {
                         /* rle match copying */
                         unsigned int c = src[0];
                         unsigned int hw = (c << 24u) | (c << 16u) | (c << 8u) | (unsigned)c;
@@ -2900,8 +2902,7 @@ sinfl_decompress(unsigned char* out, int cap, const unsigned char* in, int size)
                         dst = sinfl_write64(dst, w);
                         do dst = sinfl_write64(dst, w);
                         while (dst < out);
-                    }
-                    else {
+                    } else {
                         /* byte copy match */
                         *dst++ = *src++;
                         *dst++ = *src++;
@@ -2917,17 +2918,16 @@ sinfl_decompress(unsigned char* out, int cap, const unsigned char* in, int size)
                     while (dst < out);
                 }}
             }
-        } break;
-        }
+        } break;}
     }
     return (int)(out-o);
 }
 extern int
-sinflate(void* out, int cap, const void* in, int size) {
+sinflate(void *out, int cap, const void *in, int size) {
     return sinfl_decompress((unsigned char*)out, cap, (const unsigned char*)in, size);
 }
 static unsigned
-sinfl_adler32(unsigned adler32, const unsigned char* in, int in_len) {
+sinfl_adler32(unsigned adler32, const unsigned char *in, int in_len) {
     const unsigned ADLER_MOD = 65521;
     unsigned s1 = adler32 & 0xffff;
     unsigned s2 = adler32 >> 16;
@@ -2935,7 +2935,7 @@ sinfl_adler32(unsigned adler32, const unsigned char* in, int in_len) {
 
     blk_len = in_len % 5552;
     while (in_len) {
-        for (i = 0; i + 7 < blk_len; i += 8) {
+        for (i=0; i + 7 < blk_len; i += 8) {
             s1 += in[0]; s2 += s1;
             s1 += in[1]; s2 += s1;
             s1 += in[2]; s2 += s1;
@@ -2954,62 +2954,131 @@ sinfl_adler32(unsigned adler32, const unsigned char* in, int in_len) {
     } return (unsigned)(s2 << 16) + (unsigned)s1;
 }
 extern int
-zsinflate(void* out, int cap, const void* mem, int size) {
-    const unsigned char* in = (const unsigned char*)mem;
+zsinflate(void *out, int cap, const void *mem, int size) {
+    const unsigned char *in = (const unsigned char*)mem;
     if (size >= 6) {
-        const unsigned char* eob = in + size - 4;
+        const unsigned char *eob = in + size - 4;
         int n = sinfl_decompress((unsigned char*)out, cap, in + 2u, size);
         unsigned a = sinfl_adler32(1u, (unsigned char*)out, n);
         unsigned h = eob[0] << 24 | eob[1] << 16 | eob[2] << 8 | eob[3] << 0;
         return a == h ? n : -1;
-    }
-    else {
+    } else {
         return -1;
     }
 }
+
 #endif  /* SINFL_IMPLEMENTATION */
 
 /*
-## sefl and sinfl License
+# Small Deflate
+`sdefl` is a small bare bone lossless compression library in ANSI C (ISO C90)
+which implements the Deflate (RFC 1951) compressed data format specification standard.
+It is mainly tuned to get as much speed and compression ratio from as little code
+as needed to keep the implementation as concise as possible.
+
+## Features
+- Portable single header and source file duo written in ANSI C (ISO C90)
+- Dual license with either MIT or public domain
+- Small implementation
+    - Deflate: 525 LoC
+    - Inflate: 500 LoC
+- Webassembly:
+    - Deflate ~3.7 KB (~2.2KB compressed)
+    - Inflate ~3.6 KB (~2.2KB compressed)
+
+## Usage:
+This file behaves differently depending on what symbols you define
+before including it.
+
+Header-File mode:
+If you do not define `SINFL_IMPLEMENTATION` before including this file, it
+will operate in header only mode. In this mode it declares all used structs
+and the API of the library without including the implementation of the library.
+
+Implementation mode:
+If you define `SINFL_IMPLEMENTATION` before including this file, it will
+compile the implementation. Make sure that you only include
+this file implementation in *one* C or C++ file to prevent collisions.
+
+### Benchmark
+
+| Compressor name         | Compression| Decompress.| Compr. size | Ratio |
+| ------------------------| -----------| -----------| ----------- | ----- |
+| miniz 1.0 -1            |   122 MB/s |   208 MB/s |    48510028 | 48.51 |
+| miniz 1.0 -6            |    27 MB/s |   260 MB/s |    36513697 | 36.51 |
+| miniz 1.0 -9            |    23 MB/s |   261 MB/s |    36460101 | 36.46 |
+| zlib 1.2.11 -1          |    72 MB/s |   307 MB/s |    42298774 | 42.30 |
+| zlib 1.2.11 -6          |    24 MB/s |   313 MB/s |    36548921 | 36.55 |
+| zlib 1.2.11 -9          |    20 MB/s |   314 MB/s |    36475792 | 36.48 |
+| sdefl 1.0 -0            |   127 MB/s |   355 MB/s |    40004116 | 39.88 |
+| sdefl 1.0 -1            |   111 MB/s |   413 MB/s |    38940674 | 38.82 |
+| sdefl 1.0 -5            |    45 MB/s |   436 MB/s |    36577183 | 36.46 |
+| sdefl 1.0 -7            |    38 MB/s |   432 MB/s |    36523781 | 36.41 |
+| libdeflate 1.3 -1       |   147 MB/s |   667 MB/s |    39597378 | 39.60 |
+| libdeflate 1.3 -6       |    69 MB/s |   689 MB/s |    36648318 | 36.65 |
+| libdeflate 1.3 -9       |    13 MB/s |   672 MB/s |    35197141 | 35.20 |
+| libdeflate 1.3 -12      |  8.13 MB/s |   670 MB/s |    35100568 | 35.10 |
+
+### Compression
+Results on the [Silesia compression corpus](http://sun.aei.polsl.pl/~sdeor/index.php?page=silesia):
+
+| File    |   Original | `sdefl 0`    | `sdefl 5`  | `sdefl 7`   |
+| --------| -----------| -------------| ---------- | ------------|
+| dickens | 10.192.446 | 4,260,187    |  3,845,261 |   3,833,657 |
+| mozilla | 51.220.480 | 20,774,706   | 19,607,009 |  19,565,867 |
+| mr      |  9.970.564 | 3,860,531    |  3,673,460 |   3,665,627 |
+| nci     | 33.553.445 | 4,030,283    |  3,094,526 |   3,006,075 |
+| ooffice |  6.152.192 | 3,320,063    |  3,186,373 |   3,183,815 |
+| osdb    | 10.085.684 | 3,919,646    |  3,649,510 |   3,649,477 |
+| reymont |  6.627.202 | 2,263,378    |  1,857,588 |   1,827,237 |
+| samba   | 21.606.400 | 6,121,797    |  5,462,670 |   5,450,762 |
+| sao     |  7.251.944 | 5,612,421    |  5,485,380 |   5,481,765 |
+| webster | 41.458.703 | 13,972,648   | 12,059,432 |  11,991,421 |
+| xml     |  5.345.280 | 886,620      |    674,009 |     662,141 |
+| x-ray   |  8.474.240 | 6,304,655    |  6,244,779 |   6,244,779 |
+
+## License
+```
 ------------------------------------------------------------------------------
 This software is available under 2 licenses -- choose whichever you prefer.
 ------------------------------------------------------------------------------
 ALTERNATIVE A - MIT License
-Copyright(c) 2020 Micha Mettke
+Copyright (c) 2020 Micha Mettke
 Permission is hereby granted, free of charge, to any person obtaining a copy of
-this softwareand associated documentation files(the "Software"), to deal in
+this software and associated documentation files (the "Software"), to deal in
 the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and /or sell copies
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
 of the Software, and to permit persons to whom the Software is furnished to do
-so, subject to the following conditions :
-The above copyright noticeand this permission notice shall be included in all
+so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ------------------------------------------------------------------------------
-ALTERNATIVE B - Public Domain(www.unlicense.org)
+ALTERNATIVE B - Public Domain (www.unlicense.org)
 This is free and unencumbered software released into the public domain.
 Anyone is free to copy, modify, publish, use, compile, sell, or distribute this
 software, either in source code form or as a compiled binary, for any purpose,
 commercial or non-commercial, and by any means.
 In jurisdictions that recognize copyright laws, the author or authors of this
 software dedicate any and all copyright interest in the software to the public
-domain.We make this dedication for the benefit of the public at largeand to
-the detriment of our heirsand successors.We intend this dedication to be an
-overt act of relinquishment in perpetuity of all presentand future rights to
+domain. We make this dedication for the benefit of the public at large and to
+the detriment of our heirs and successors. We intend this dedication to be an
+overt act of relinquishment in perpetuity of all present and future rights to
 this software under copyright law.
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
 ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------------
+```
 */
 #endif  // RPNG_DEFLATE_IMPLEMENTATION
 
