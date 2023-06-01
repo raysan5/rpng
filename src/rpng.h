@@ -15,6 +15,7 @@
 *
 *   POSSIBLE IMPROVEMENTS:
 *       - Support error return codes, not only errors logging
+*       - Support APNG chunks, added to PNG specs recently (draft)
 * 
 *   CONFIGURATION:
 *       #define RPNG_IMPLEMENTATION
