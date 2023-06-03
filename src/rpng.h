@@ -751,7 +751,7 @@ void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text)
     struct sdefl *sde = RPNG_CALLOC(sizeof(struct sdefl), 1);
     int bounds = sdefl_bound(text_len);
     unsigned char *comp_text = (unsigned char *)RPNG_CALLOC(bounds, 1);
-    int comp_text_size = zsdeflate(sde, comp_text, (unsigned char *)text, text_len, 8);   // Compression level 8, same as stbwi
+    int comp_text_size = zsdeflate(sde, comp_text, (unsigned char *)text, text_len, 8);   // Compression level 8, same as stbiw
     RPNG_FREE(sde);
 
     // Fill chunk with required data
@@ -1344,7 +1344,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
     struct sdefl *sde = RPNG_CALLOC(sizeof(struct sdefl), 1);
     int bounds = sdefl_bound(data_filtered_size);
     unsigned char *comp_data = (unsigned char *)RPNG_CALLOC(bounds, 1);
-    int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_filtered_size, 8);   // Compression level 8, same as stbwi
+    int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_filtered_size, 8);   // Compression level 8, same as stbiw
     RPNG_FREE(data_filtered);
     RPNG_FREE(sde);
     
