@@ -714,7 +714,7 @@ void rpng_chunk_write_text(const char *filename, char *keyword, char *text)
     // NOTE: CRC can be left to 0, it's calculated internally on writing
     memcpy(chunk.type, "tEXt", 4);
     chunk.length = keyword_len + 1 + text_len;
-    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    chunk.data = (unsigned char*)RPNG_CALLOC(chunk.length, 1);
     memcpy(((unsigned char*)chunk.data), keyword, keyword_len);
     memcpy(((unsigned char*)chunk.data) + keyword_len + 1, text, text_len);
     chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
@@ -748,7 +748,7 @@ void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text)
     int text_len = (int)strlen(text);
 
     // Compress filtered image data and generate a valid zlib stream
-    struct sdefl *sde = RPNG_CALLOC(sizeof(struct sdefl), 1);
+    struct sdefl *sde = (struct sdefl*)RPNG_CALLOC(sizeof(struct sdefl), 1);
     int bounds = sdefl_bound(text_len);
     unsigned char *comp_text = (unsigned char *)RPNG_CALLOC(bounds, 1);
     int comp_text_size = zsdeflate(sde, comp_text, (unsigned char *)text, text_len, 8);   // Compression level 8, same as stbiw
@@ -790,7 +790,7 @@ void rpng_chunk_write_gamma(const char *filename, float gamma)
     // NOTE: CRC can be left to 0, it's calculated internally on writing
     memcpy(chunk.type, "gAMA", 4);
     chunk.length = 4;
-    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    chunk.data = (unsigned char*)RPNG_CALLOC(chunk.length, 1);
     gamma_value = swap_endian(gamma_value);
     memcpy(((unsigned char*)chunk.data), &gamma_value, 4);
     chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
@@ -826,7 +826,7 @@ void rpng_chunk_write_srgb(const char *filename, char srgb_type)
     // NOTE: CRC can be left to 0, it's calculated internally on writing
     memcpy(chunk.type, "sRGB", 4);
     chunk.length = 1;
-    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    chunk.data = (unsigned char*)RPNG_CALLOC(chunk.length, 1);
     memcpy(((unsigned char*)chunk.data), &srgb_type, 1);
     chunk.crc = 0;  // Computed by rpng_chunk_write_from_memory()
 
@@ -861,7 +861,7 @@ void rpng_chunk_write_time(const char *filename, short year, char month, char da
     // NOTE: CRC can be left to 0, it's calculated internally on writing
     memcpy(chunk.type, "tIME", 4);
     chunk.length = 7;
-    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    chunk.data = (unsigned char*)RPNG_CALLOC(chunk.length, 1);
     memcpy(((unsigned char*)chunk.data), &year, 2);
     memcpy(((unsigned char*)chunk.data) + 2, &month, 1);
     memcpy(((unsigned char*)chunk.data) + 3, &day, 1);
@@ -898,7 +898,7 @@ void rpng_chunk_write_physical_size(const char *filename, int pixels_unit_x, int
     // NOTE: CRC can be left to 0, it's calculated internally on writing
     memcpy(chunk.type, "pHYs", 4);
     chunk.length = 9;
-    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    chunk.data = (unsigned char*)RPNG_CALLOC(chunk.length, 1);
     pixels_unit_x = swap_endian(pixels_unit_x);
     memcpy(((unsigned char*)chunk.data), &pixels_unit_x, 4);
     pixels_unit_y = swap_endian(pixels_unit_y);
@@ -941,7 +941,7 @@ void rpng_chunk_write_chroma(const char *filename, float white_x, float white_y,
     // NOTE: CRC can be left to 0, it's calculated internally on writing
     memcpy(chunk.type, "pHYs", 4);
     chunk.length = 8*4;     // 8 integer values
-    chunk.data = RPNG_CALLOC(chunk.length, 1);
+    chunk.data = (unsigned char*)RPNG_CALLOC(chunk.length, 1);
     int white_x_value = swap_endian((int)(white_x*100000));
     memcpy(((unsigned char*)chunk.data), &white_x_value, 4);
     int white_y_value = swap_endian((int)(white_y*100000));
@@ -1012,7 +1012,7 @@ bool rpng_chunk_check_all_valid(const char *filename)
     if (chunks == NULL) return false;
 
     unsigned int crc = 0;
-    char *chunk_type_data = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
+    char *chunk_type_data = (char*)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
 
     if (chunk_type_data != NULL)
     {
@@ -1125,7 +1125,7 @@ char *rpng_load_image_from_memory(const char *buffer, int *width, int *height, i
             {
                 // Verify data integrity CRC
                 unsigned int crc = 0;
-                char *chunk_type_data = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
+                char *chunk_type_data = (char*)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
                 memcpy(chunk_type_data, chunks[i].type, 4);
                 memcpy(chunk_type_data + 4, chunks[i].data, chunks[i].length);
                 crc = compute_crc32((unsigned char *)chunk_type_data, 4 + chunks[i].length);
@@ -1216,7 +1216,7 @@ char *rpng_load_image_from_memory(const char *buffer, int *width, int *height, i
     for (int i = 0; i < count; i++) RPNG_FREE(chunks[i].data);
     RPNG_FREE(chunks);
 
-    if (dataChunkCounter == 1) data = data_piece[0];
+    if (dataChunkCounter == 1) data = (char*)data_piece[0];
     else
     {
         // Load enough memory for all image uncompressed data
@@ -1341,7 +1341,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
     }
 
     // Compress filtered image data and generate a valid zlib stream
-    struct sdefl *sde = RPNG_CALLOC(sizeof(struct sdefl), 1);
+    struct sdefl *sde = (struct sdefl*)RPNG_CALLOC(sizeof(struct sdefl), 1);
     int bounds = sdefl_bound(data_filtered_size);
     unsigned char *comp_data = (unsigned char *)RPNG_CALLOC(bounds, 1);
     int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_filtered_size, 8);   // Compression level 8, same as stbiw
@@ -1438,7 +1438,7 @@ rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_typ
             {
                 chunk.length = chunk_size;
                 memcpy(chunk.type, (char *)(buffer_ptr + 4), 4);
-                chunk.data = RPNG_MALLOC(chunk_size);
+                chunk.data = (unsigned char*)RPNG_MALLOC(chunk_size);
                 memcpy(chunk.data, buffer_ptr + 8, chunk_size);
                 chunk.crc = swap_endian(((unsigned int *)(buffer_ptr + 8 + chunk_size))[0]);
 
@@ -1474,7 +1474,7 @@ rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count)
         {
             chunks[counter].length = chunk_size;
             memcpy(chunks[counter].type, (char *)(buffer_ptr + 4), 4);
-            chunks[counter].data = RPNG_MALLOC(chunk_size);
+            chunks[counter].data = (unsigned char*)RPNG_MALLOC(chunk_size);
             memcpy(chunks[counter].data, buffer_ptr + 8, chunk_size);
             chunks[counter].crc = swap_endian(((unsigned int *)(buffer_ptr + 8 + chunk_size))[0]);
 
@@ -1488,7 +1488,7 @@ rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count)
         // Read final IEND chunk
         chunks[counter].length = chunk_size;
         memcpy(chunks[counter].type, (char *)(buffer_ptr + 4), 4);
-        chunks[counter].data = RPNG_MALLOC(chunk_size);
+        chunks[counter].data = (unsigned char*)RPNG_MALLOC(chunk_size);
         memcpy(chunks[counter].data, buffer_ptr + 8, chunk_size);
         chunks[counter].crc = swap_endian(((unsigned int *)(buffer_ptr + 8 + chunk_size))[0]);
 
@@ -1496,7 +1496,7 @@ rpng_chunk *rpng_chunk_read_all_from_memory(const char *buffer, int *count)
     }
 
     // Reallocate chunks file_size
-    rpng_chunk *chunks_resized = RPNG_REALLOC(chunks, counter*sizeof(rpng_chunk));
+    rpng_chunk *chunks_resized = (rpng_chunk*)RPNG_REALLOC(chunks, counter*sizeof(rpng_chunk));
     if (chunks_resized != NULL) chunks = chunks_resized;
 
     *count = counter;
@@ -1513,7 +1513,7 @@ char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, 
 
     if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
     {
-        output_buffer = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);  // Output buffer allocation
+        output_buffer = (char*)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);  // Output buffer allocation
 
         memcpy(output_buffer, png_signature, 8);        // Copy PNG signature
         output_buffer_size += 8;
@@ -1540,7 +1540,7 @@ char *rpng_chunk_remove_from_memory(const char *buffer, const char *chunk_type, 
         output_buffer_size += 12;
 
         // Resize output buffer
-        char *output_buffer_sized = RPNG_REALLOC(output_buffer, output_buffer_size);
+        char *output_buffer_sized = (char*)RPNG_REALLOC(output_buffer, output_buffer_size);
         if (output_buffer_sized != NULL) output_buffer = output_buffer_sized;
     }
 
@@ -1560,7 +1560,7 @@ char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_si
     {
         bool preserve_palette_transparency = false;
 
-        output_buffer = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);  // Output buffer allocation
+        output_buffer = (char*)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);  // Output buffer allocation
 
         memcpy(output_buffer, png_signature, 8);        // Copy PNG signature
         output_buffer_size += 8;
@@ -1591,7 +1591,7 @@ char *rpng_chunk_remove_ancillary_from_memory(const char *buffer, int *output_si
         output_buffer_size += 12;
 
         // Resize output buffer
-        char *output_buffer_sized = RPNG_REALLOC(output_buffer, output_buffer_size);
+        char *output_buffer_sized = (char*)RPNG_REALLOC(output_buffer, output_buffer_size);
         if (output_buffer_sized != NULL) output_buffer = output_buffer_sized;
     }
 
@@ -1609,7 +1609,7 @@ char *rpng_chunk_write_from_memory(const char *buffer, rpng_chunk chunk, int *ou
 
     if ((buffer_ptr != NULL) && (memcmp(buffer_ptr, png_signature, 8) == 0))  // Check valid PNG file
     {
-        output_buffer = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
+        output_buffer = (char*)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1);
 
         memcpy(output_buffer, png_signature, 8);        // Copy PNG signature
         output_buffer_size += 8;
@@ -1630,7 +1630,7 @@ char *rpng_chunk_write_from_memory(const char *buffer, rpng_chunk chunk, int *ou
                 memcpy(output_buffer + output_buffer_size + 4, chunk.type, 4);                // Write chunk type
                 memcpy(output_buffer + output_buffer_size + 4 + 4, chunk.data, chunk.length); // Write chunk data
 
-                unsigned char *type_data = RPNG_MALLOC(4 + chunk.length);
+                unsigned char *type_data = (unsigned char*)RPNG_MALLOC(4 + chunk.length);
                 memcpy(type_data, chunk.type, 4);
                 memcpy(type_data + 4, chunk.data, chunk.length);
                 unsigned int crc = compute_crc32(type_data, 4 + chunk.length);
@@ -1651,7 +1651,7 @@ char *rpng_chunk_write_from_memory(const char *buffer, rpng_chunk chunk, int *ou
         output_buffer_size += 12;
 
         // Resize output buffer
-        char *output_buffer_sized = RPNG_REALLOC(output_buffer, output_buffer_size);
+        char *output_buffer_sized = (char*)RPNG_REALLOC(output_buffer, output_buffer_size);
         if (output_buffer_sized != NULL) output_buffer = output_buffer_sized;
     }
 
