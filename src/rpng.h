@@ -159,7 +159,7 @@
 
 // Simple log system to avoid RPNG_LOG() calls if required
 // NOTE: Avoiding those calls, also avoids const strings memory usage
-#define RPNG_SHOW_LOG_INFO
+//#define RPNG_SHOW_LOG_INFO
 #if defined(RPNG_SHOW_LOG_INFO)
   #define RPNG_LOG(...) printf(__VA_ARGS__)
 #else
@@ -1348,7 +1348,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
     RPNG_FREE(data_filtered);
     RPNG_FREE(sde);
 
-    RPNG_LOG("Data size: %i -> Comp data size: %i\n", data_filtered_size, comp_data_size);
+    RPNG_LOG("INFO: rpng_save_image: data size: %i -> Comp data size: %i\n", data_filtered_size, comp_data_size);
 
     // Security check to verify compression worked
     if (comp_data_size > 0)
