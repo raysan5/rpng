@@ -1,17 +1,17 @@
 /**********************************************************************************************
 *
-*   rpng v1.1 - A simple and easy-to-use library to manage png chunks
+*   rpng v1.2 - A simple and easy-to-use library to manage png chunks
 *
 *   FEATURES:
-*       - Load/Save PNG images from/to raw image data
+*       - Load/Save png images from/to raw image data
+*       - Load/Save indexed image data (providing palette)
 *       - Count/read/write/remove png chunks
 *       - Operate on file or memory buffer
 *       - Chunks data abstraction
 *       - Add custom chunks
 *
 *   LIMITATIONS:
-*       - No indexed color type supported (PLTE)
-*       - No grayscale color type with 1/2/4 bits (1 channel), only 8/16 bits
+*       - No grayscale color type supported for 1/2/4 bits (1 channel), only 8/16 bits
 *
 *   POSSIBLE IMPROVEMENTS:
 *       - Support error return codes, not only errors logging
@@ -89,6 +89,9 @@
 *       Comment          Miscellaneous comment; conversion from GIF comment
 *
 *   VERSIONS HISTORY:
+*       1.2 (20-Aug-2024) ADDED: Support indexed data loading and saving (PLTE)
+*                         ADDED: rpng_load_image_indexed()
+*                         ADDED: rpng_save_image_indexed()
 *       1.1 (29-May-2023) UPDATED: sdefl and sinfl, fixed issue
 *       1.0 (24-Dec-2021) ADDED: rpng_load_image()
 *                         ADDED: RPNG_LOG() macro
@@ -209,20 +212,25 @@ extern "C" {                // Prevents name mangling of functions
 // Load a PNG file image data
 //  - Color channels are returned by reference, supported values: 1 (GRAY), 2 (GRAY+ALPHA), 3 (RGB), 4 (RGBA)
 //  - Bit depth is returned by reference, supported values: 8 bit, 16 bit
-// NOTE: Color indexed image formats are not supported
 RPNGAPI char *rpng_load_image(const char *filename, int *width, int *height, int *color_channels, int *bit_depth);
+
+// Load a PNG file image data indexed (including palette)
+//  - Returns indexed data as an index byte array (8bit) along the palette data (PLTE - RGB888 - 24bit)
+// WARNING: In case data is not indexed, it behaves same as rpng_load_image(), just returning color_channels and bit_depth
+RPNGAPI char *rpng_load_image_indexed(const char *filename, int *width, int *height, char *palette, int *palette_size);
 
 // Save a PNG file from image data (IHDR, IDAT, IEND)
 //  - Color channels defines pixel color channels, supported values: 1 (GRAY), 2 (GRAY+ALPHA), 3 (RGB), 4 (RGBA)
 //  - Bit depth defines every color channel size, supported values: 8 bit, 16 bit
-// NOTE: It's up to the user to provide the right data format as specified by color_channels and bit_depth
-RPNGAPI void rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
+//  - Returns saving process result: 0-SUCCESS
+RPNGAPI int rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
 
 // Save a PNG file from indexed image data (IHDR, PLTE, (tRNS), IDAT, IEND)
 //  - Palette colours must be provided as R8G8B8, they are saved in PLTE chunk
 //  - Palette alpha should be provided as R8, it is saved in tRNS chunk (if not NULL)
 //  - Palette max number of entries is limited to [1..256] colors
-RPNGAPI void rpng_save_image_indexed(const char *filename, const char *data, int width, int height, const char *palette, const char *palette_alpha, int palette_size);
+//  - Returns saving process result: 0-SUCCESS
+RPNGAPI int rpng_save_image_indexed(const char *filename, const char *data, int width, int height, const char *palette, const char *palette_alpha, int palette_size);
 
 // Read and write chunks from file
 RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
@@ -249,7 +257,9 @@ RPNGAPI void rpng_chunk_split_image_data(const char *filename, int split_size); 
 
 // Load and save png data from memory buffer
 RPNGAPI char *rpng_load_image_from_memory(const char *buffer, int *width, int *height, int *color_channels, int *bit_depth);  // Load png data from memory buffer
+RPNGAPI char *rpng_load_image_indexed_from_memory(const char *buffer, int *width, int *height, char *palette, int *palette_size); // Load indexed png data from memory buffer
 RPNGAPI char *rpng_save_image_to_memory(const char *data, int width, int height, int color_channels, int bit_depth, int *output_size); // Save png data to memory buffer
+RPNGAPI char *rpng_save_image_indexed_to_memory(const char *data, int width, int height, const char *palette, const char *palette_alpha, int palette_size, int *output_size); // Save indexed png data to memory buffer
 
 // Read and write chunks from memory buffer
 RPNGAPI int rpng_chunk_count_from_memory(const char *buffer);                                               // Count the chunks in a PNG image from memory
@@ -433,7 +443,7 @@ static unsigned int compute_crc32(unsigned char *buffer, int size); // Compute C
 
 // Load/save png file data from/to memory buffer
 static char *load_file_to_buffer(const char *filename, int *bytes_read);
-static void save_file_from_buffer(const char *filename, void *data, int bytesToWrite);
+static int save_file_from_buffer(const char *filename, void *data, int bytesToWrite);
 static bool file_exists(const char *filename);                      // Check if the file exists
 
 // sdelf and sinfl implementations placed at the end of file
@@ -544,7 +554,6 @@ static unsigned char rpng_paeth_predictor(int a, int b, int c)
 // Load a PNG file image data
 //  - Color channels are returned by reference, supported values: 1 (GRAY), 2 (GRAY+ALPHA), 3 (RGB), 4 (RGBA)
 //  - Bit depth is returned by reference, supported values: 8 bit, 16 bit
-// NOTE: Color indexed image formats are not supported
 char *rpng_load_image(const char *filename, int *width, int *height, int *color_channels, int *bit_depth)
 {
     char *data = NULL;
@@ -559,12 +568,28 @@ char *rpng_load_image(const char *filename, int *width, int *height, int *color_
     return data;
 }
 
+// Load a PNG file image data indexed (including palette)
+//  - Returns indexed data as an index byte array (8bit) along the palette data (PLTE - RGB888 - 24bit)
+char *rpng_load_image_indexed(const char *filename, int *width, int *height, char *palette, int *palette_size)
+{
+    char *data = NULL;
+
+    int file_size = 0;
+    char *file_data = load_file_to_buffer(filename, &file_size);
+
+    data = rpng_load_image_indexed_from_memory(file_data, width, height, palette, palette_size);
+
+    RPNG_FREE(file_data);
+
+    return data;
+}
+
 // Save a PNG file from image data (IHDR, IDAT, IEND)
 //  - Color channels defines pixel color channels, supported values: 1 (GRAY), 2 (GRAY+ALPHA), 3 (RGB), 4 (RGBA)
 //  - Bit depth defines every color channel size, supported values: 8 bit, 16 bit
-// NOTE: It's up to the user to provide the right data format as specified by color_channels and bit_depth
-void rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth)
+int rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth)
 {
+    int result = 0;
     char *file_output = NULL;
     int file_output_size = 0;
 
@@ -574,17 +599,30 @@ void rpng_save_image(const char *filename, const char *data, int width, int heig
     else RPNG_LOG("WARNING: PNG data saving failed");
 
     RPNG_FREE(file_output);
+    return result;
 }
 
 // Save a PNG file from indexed image data (IHDR, PLTE, (tRNS), IDAT, IEND)
 //  - Palette colours must be provided as RGB888, they are saved in PLTE chunk
 //  - Palette alpha should be provided as R8, it is saved in tRNS chunk (if not NULL)
 //  - Palette max number of entries is limited to [1..256] colors
-void rpng_save_image_indexed(const char *filename, const char *data, int width, int height, const char *palette, const char *palette_alpha, int palette_size)
+int rpng_save_image_indexed(const char *filename, const char *data, int width, int height, const char *palette, const char *palette_alpha, int palette_size)
 {
+    int result = 0;
     // TODO: Support PLTE + tRNS
 
-    // Indexed color data uses image prefilter 0 by default
+    // NOTE: Indexed color data uses image prefilter 0 by default
+
+    char *file_output = NULL;
+    int file_output_size = 0;
+
+    file_output = rpng_save_image_indexed_to_memory(data, width, height, palette, palette_alpha, palette_size, &file_output_size);
+
+    if ((file_output != NULL) && (file_output_size > 0)) save_file_from_buffer(filename, file_output, file_output_size);
+    else RPNG_LOG("WARNING: PNG data saving failed");
+
+    RPNG_FREE(file_output);
+    return result;
 }
 
 // Count number of PNG chunks
@@ -1101,10 +1139,11 @@ char *rpng_load_image_from_memory(const char *buffer, int *width, int *height, i
         case 4: *color_channels = 2; break;     // Pixel format: 4-GrayAlpha
         case 2: *color_channels = 3; break;     // Pixel format: 2-RGB
         case 6: *color_channels = 4; break;     // Pixel format: 6-RGBA
-        case 3: *color_channels = 0; break;     // Pixel format: 3-Indexed  (Not supported)
+        case 3: *color_channels = 0; break;     // Pixel format: 3-Indexed
         default: break;
     }
 
+    // TODO: Support bit depths of 1/2/4 bits? -> Convert to 8bit grayscale
     if ((*color_channels == 1) && (*bit_depth != 8) && (*bit_depth != 16)) return data;  // Bit depth 1/2/4 not supported
 
     // Additional info provided by IHDR (in case it was required)
@@ -1113,14 +1152,15 @@ char *rpng_load_image_from_memory(const char *buffer, int *width, int *height, i
     //IHDRData->interlace;          // Interlace scheme (optional): 0 (none)
 
     //int firstDataChunk = 0;
-    //bool consecutiveDataChunks = true;
+    //bool consecutiveDataChunks = true;    // Only considering consecutive IDAT chunks
 
     if (*color_channels != 0)
     {
         for (int i = 1; i < count; i++)
         {
             // NOTE: There can be multiple IDAT chunks; if so, they must appear
-            // consecutively with no other intervening chunks (not checked -> TODO)
+            // consecutively with no other intervening chunks
+            // TODO: Consider non-consecutive IDAT chunks?
             if (memcmp(chunks[i].type, "IDAT", 4) == 0)     // Check IDAT chunk: image data
             {
                 // Verify data integrity CRC
@@ -1231,6 +1271,15 @@ char *rpng_load_image_from_memory(const char *buffer, int *width, int *height, i
 
         for (unsigned int i = 0; i < dataChunkCounter; i++) RPNG_FREE(data_piece[i]);
     }
+
+    return data;
+}
+
+// Load indexed png data (including palette) from memory buffer
+// NOTE: Returns indexed data as an index byte array (8bit) along the palette data (PLTE - RGB888 - 24bit)
+char *rpng_load_image_indexed_from_memory(const char *buffer, int *width, int *height, char *palette, int *palette_size)
+{
+    char *data = NULL;
 
     return data;
 }
@@ -1391,6 +1440,17 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
     *output_size = output_buffer_size;
     return output_buffer;
 }
+
+// Save indexed png data to memory buffer
+char *rpng_save_image_indexed_to_memory(const char *data, int width, int height, const char *palette, const char *palette_alpha, int palette_size, int *output_size)
+{
+    char *output = NULL;
+
+    *output_size = 0;
+    return output;
+}
+
+// Chunks managemeng ---->
 
 // Count the chunks in a PNG image from memory buffer
 int rpng_chunk_count_from_memory(const char *buffer)
@@ -1915,8 +1975,9 @@ static char *load_file_to_buffer(const char *filename, int *bytes_read)
 }
 
 // Write data to file from buffer
-static void save_file_from_buffer(const char *filename, void *data, int bytesToWrite)
+static int save_file_from_buffer(const char *filename, void *data, int bytesToWrite)
 {
+    int result = 0;     // TODO: Return image saving result
 #if !defined(RPNG_NO_STDIO)
     if ((filename != NULL) && (data != NULL) && (bytesToWrite > 0))
     {
@@ -1941,6 +2002,7 @@ static void save_file_from_buffer(const char *filename, void *data, int bytesToW
     (void)bytesToWrite;
     #warning No FILE I/O API, RPNG_NO_STDIO defined
 #endif
+    return result;
 }
 
 // Check if the file exists
