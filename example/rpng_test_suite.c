@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
         rpng_chunk_combine_image_data(argv[1]);
         rpng_chunk_print_info(argv[1]);
     }
-    else printf("WARNING: No input file provided.\n");
+    else printf("WARNING: No input file provided as argument\n");
 
 #if 0
     // TEST: Create a colorful image: 128x128, RGB
@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
     rpng_save_image("resources/fudesumi_rpng.png", pixdata, 384, 512, 4, 8);
     RPNG_FREE(pixdata);
 #endif
-#if 1
+#if 0
     int width = 0;
     int height = 0;
     int channels = 0;
@@ -175,11 +175,33 @@ int main(int argc, char *argv[])
     if (data != NULL)
     {
         FILE *image = fopen("resources/fudesumi_rpng_output.raw", "wb");
-        fwrite(data, 1, width*height*channels*bits/8, image);
-        fclose(image);
+        if (image != NULL)
+        {
+            fwrite(data, 1, width*height*channels*bits/8, image);
+            fclose(image);
+        }
     }
     //rpng_save_image("resources/fudesumi_rpng_saved.png", data, width, height, 4, 8);
     RPNG_FREE(data);
+#endif
+#if 1
+    int width = 0;
+    int height = 0;
+    rpng_palette palette = { 0 };
+
+    // Returns indexed data as an index byte array (8bit) along the palette data (PLTE - RGB888 - 24bit)
+    // WARNING: In case data is not indexed, returns NULL
+    char *image_data = rpng_load_image_indexed("resources/scarfy_indexed.png", &width, &height, &palette);
+
+    if (image_data != NULL)
+    {
+        printf("Indexed data loaded: %i x %i, channels: %i\n", width, height, 1);
+        printf("Palette color count: %i\n", palette.color_count);
+
+        // TODO: Display image data in some way to verify it has been properly loaded
+
+        //rpng_save_image_indexed("resources/scarfy_indexed_output.png", width, height, palette, palette_alpha, palette_size);
+    }
 #endif
 
     return 0;
