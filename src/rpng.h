@@ -29,6 +29,8 @@
 *       #define RPNG_NO_STDIO
 *           Do not include FILE I/O API, only read/write from memory buffers
 *
+*       #define RPNG_NO_STDIO_WARNING
+*           Skips issuing a compiler warning when RPNG_NO_STDIO is defined.
 *
 *   DEPENDENCIES: libc (C standard library)
 *       stdlib.h        Required for: malloc(), calloc(), free()
@@ -2232,7 +2234,9 @@ static char *load_file_to_buffer(const char *filename, int *bytes_read)
     else RPNG_LOG("FILEIO: File path provided is not valid\n");
 #else
     (void)filename;
-    #warning No FILE I/O API, RPNG_NO_STDIO defined
+    #ifndef RPNG_NO_STDIO_WARNING
+        #warning No FILE I/O API, RPNG_NO_STDIO defined
+    #endif
 #endif
     return data;
 }
@@ -2263,7 +2267,9 @@ static int save_file_from_buffer(const char *filename, void *data, int bytesToWr
     (void)filename;
     (void)data;
     (void)bytesToWrite;
-    #warning No FILE I/O API, RPNG_NO_STDIO defined
+    #ifndef RPNG_NO_STDIO_WARNING
+        #warning No FILE I/O API, RPNG_NO_STDIO defined
+    #endif
 #endif
     return result;
 }
