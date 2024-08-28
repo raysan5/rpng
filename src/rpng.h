@@ -94,6 +94,7 @@
 *       1.5 (28-Aug-2024) ADDED: Support indexed data loading and saving (PLTE, tRNS)
 *                         ADDED: rpng_load_image_indexed() (+ memory version)
 *                         ADDED: rpng_save_image_indexed() (+ memory version)
+*                         ADDED: Automatic join of IDAT chunks when requested
 *                         REVIEWED: Crashes on images loading not found
 * 
 *       1.1 (29-May-2023) UPDATED: sdefl and sinfl, fixed issue
