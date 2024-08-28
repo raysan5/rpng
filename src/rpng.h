@@ -256,14 +256,14 @@ RPNGAPI int rpng_save_image(const char *filename, const char *data, int width, i
 //  - Palette alpha is saved as R8 in tRNS chunk (if required)
 //  - Palette max number of entries is limited to [1..256] colors
 //  - Returns saving process result: 0-SUCCESS
-RPNGAPI int rpng_save_image_indexed(const char *filename, const char *data, int width, int height, rpng_palette palette);
+RPNGAPI int rpng_save_image_indexed(const char *filename, const char *indexed_data, int width, int height, rpng_palette palette);
 
 // Load and save png data from memory buffer
 // WARNING: Provided buffer is expected to be PNG compliant, ending with IEND chunk
 RPNGAPI char *rpng_load_image_from_memory(const char *buffer, int *width, int *height, int *color_channels, int *bit_depth); // Load png data from memory buffer
-RPNGAPI char *rpng_load_image_indexed_from_memory(const char *buffer, int *width, int *height, rpng_palette *palette); // Load indexed png data from memory buffer
+RPNGAPI char *rpng_load_image_indexed_from_memory(const char *buffer, int *width, int *height, rpng_palette *palette); // Load indexed png data from memory buffer (8 bpp)
 RPNGAPI char *rpng_save_image_to_memory(const char *data, int width, int height, int color_channels, int bit_depth, int *output_size); // Save png data to memory buffer
-RPNGAPI char *rpng_save_image_indexed_to_memory(const char *data, int width, int height, rpng_palette palette, int *output_size); // Save indexed png data to memory buffer
+RPNGAPI char *rpng_save_image_indexed_to_memory(const char *indexed_data, int width, int height, rpng_palette palette, int *output_size); // Save indexed data to memory buffer
 
 // Read and write chunks from file
 RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
@@ -468,7 +468,7 @@ const unsigned char png_signature[8] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1
 // Prefilter and compress image data (image_data -> IDAT chunk.data)
 static char *rpng_inflate_image_data(char *image_data, int image_data_size, int width, int height, int pixel_size);
 // Decompress and unfilter image data (IDAT chunk.data -> image_data)
-static char *rpng_deflate_image_data(const char *image_data, int image_data_size, int width, int height, int pixel_size, int *output_size);
+static char *rpng_deflate_image_data(const char *image_data, int image_data_size, int width, int height, int pixel_size, int *output_size, int forced_filter_type);
 
 // Swap integer from big<->little endian
 static unsigned int swap_endian(unsigned int value);
@@ -647,12 +647,12 @@ int rpng_save_image(const char *filename, const char *data, int width, int heigh
 //  - Palette colours are saved as RGB888 in PLTE chunk
 //  - Palette alpha is saved as R8 in tRNS chunk (if required)
 //  - Palette max number of entries is limited to [1..256] colors
-int rpng_save_image_indexed(const char *filename, const char *data, int width, int height, rpng_palette palette)
+int rpng_save_image_indexed(const char *filename, const char *indexed_data, int width, int height, rpng_palette palette)
 {
     int result = 0;
 
     int file_output_size = 0;
-    char *file_output = rpng_save_image_indexed_to_memory(data, width, height, palette, &file_output_size);
+    char *file_output = rpng_save_image_indexed_to_memory(indexed_data, width, height, palette, &file_output_size);
 
     if ((file_output != NULL) && (file_output_size > 0))
     {
@@ -1364,7 +1364,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
     // Image data pre-processing to append filter type byte to every scanline
     int pixel_size = color_channels*(bit_depth/8);
     int comp_data_size = 0;
-    char *comp_data = rpng_deflate_image_data(data, width*height*pixel_size, width, height, pixel_size, &comp_data_size);
+    char *comp_data = rpng_deflate_image_data(data, width*height*pixel_size, width, height, pixel_size, &comp_data_size, -1);
 
     // Security check to verify compression worked
     if ((comp_data != NULL) && (comp_data_size > 0))
@@ -1409,7 +1409,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
 }
 
 // Save indexed png data to memory buffer
-char *rpng_save_image_indexed_to_memory(const char *data, int width, int height, rpng_palette palette, int *output_size)
+char *rpng_save_image_indexed_to_memory(const char *indexed_data, int width, int height, rpng_palette palette, int *output_size)
 {
     char *output_buffer = NULL;
     int output_buffer_size = 0;
@@ -1423,7 +1423,7 @@ char *rpng_save_image_indexed_to_memory(const char *data, int width, int height,
     // Image data pre-processing to append filter type byte to every scanline
     int pixel_size = 1; // 1 byte per pixel (indexed data)
     int comp_data_size = 0;
-    char *comp_data = rpng_deflate_image_data(data, width*height*pixel_size, width, height, pixel_size, &comp_data_size);
+    char *comp_data = rpng_deflate_image_data(indexed_data, width*height*pixel_size, width, height, pixel_size, &comp_data_size, 0);
 
     // Security check to verify compression worked
     if ((comp_data != NULL) && (comp_data_size > 0))
@@ -1967,7 +1967,7 @@ char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_size, int 
 //----------------------------------------------------------------------------------
 
 // Prefilter and compress image data
-static char *rpng_deflate_image_data(const char *image_data, int image_data_size, int width, int height, int pixel_size, int *output_size)
+static char *rpng_deflate_image_data(const char *image_data, int image_data_size, int width, int height, int pixel_size, int *output_size, int forced_filter_type)
 {
     char *idat_data = NULL;
 
@@ -1983,50 +1983,54 @@ static char *rpng_deflate_image_data(const char *image_data, int image_data_size
 
     for (int y = 0; y < height; y++)
     {
-        // Choose the best filter type for every scanline
-        // REF: https://www.w3.org/TR/PNG-Encoders.html#E.Filter-selection
-        for (int p = 0; p < scanline_size; p++)
+        if (forced_filter_type == -1)
         {
-            // x = current byte
-            // a = left pixel byte (from current)
-            // b = above pixel byte (from current)
-            // c = left pixel byte (from b)
-            x = (int)((unsigned char *)image_data)[scanline_size*y + p];
-            a = (p >= pixel_size) ? (int)((unsigned char *)image_data)[scanline_size*y + p - pixel_size] : 0;
-            b = (y > 0) ? (int)((unsigned char *)image_data)[scanline_size*(y - 1) + p] : 0;
-            c = (y > 0) ? ((p >= pixel_size) ? (int)((unsigned char *)image_data)[scanline_size*(y - 1) + p - pixel_size] : 0) : 0;
-
-            // Heuristic: Compute the output scanline using all five filters
-            // REF: https://www.w3.org/TR/PNG/#9Filters
-            for (int filter = 0; filter < 5; filter++)
+            // Choose the best filter type for every scanline
+            // REF: https://www.w3.org/TR/PNG-Encoders.html#E.Filter-selection
+            for (int p = 0; p < scanline_size; p++)
             {
-                switch(filter)
+                // x = current byte
+                // a = left pixel byte (from current)
+                // b = above pixel byte (from current)
+                // c = left pixel byte (from b)
+                x = (int)((unsigned char *)image_data)[scanline_size*y + p];
+                a = (p >= pixel_size) ? (int)((unsigned char *)image_data)[scanline_size*y + p - pixel_size] : 0;
+                b = (y > 0) ? (int)((unsigned char *)image_data)[scanline_size*(y - 1) + p] : 0;
+                c = (y > 0) ? ((p >= pixel_size) ? (int)((unsigned char *)image_data)[scanline_size*(y - 1) + p - pixel_size] : 0) : 0;
+
+                // Heuristic: Compute the output scanline using all five filters
+                // REF: https://www.w3.org/TR/PNG/#9Filters
+                for (int filter = 0; filter < 5; filter++)
                 {
-                    case 0: out = x; break;
-                    case 1: out = x - a; break;
-                    case 2: out = x - b; break;
-                    case 3: out = x - ((a + b)>>1); break;
-                    case 4: out = x - rpng_paeth_predictor(a, b, c); break;
-                    default: break;
+                    switch (filter)
+                    {
+                        case 0: out = x; break;
+                        case 1: out = x - a; break;
+                        case 2: out = x - b; break;
+                        case 3: out = x - ((a + b)>>1); break;
+                        case 4: out = x - rpng_paeth_predictor(a, b, c); break;
+                        default: break;
+                    }
+
+                    sum_value[filter] += abs((signed char)out);
                 }
-
-                sum_value[filter] += abs((signed char)out);
             }
-        }
 
-        // Select the filter that gives the smallest sum of absolute values of outputs.
-        // NOTE: Considering the output bytes as signed differences for the test.
-        best_filter = 0;
-        int best_value = sum_value[0];
+            // Select the filter that gives the smallest sum of absolute values of outputs.
+            // NOTE: Considering the output bytes as signed differences for the test.
+            best_filter = 0;
+            int best_value = sum_value[0];
 
-        for (int filter = 1; filter < 5; filter++)
-        {
-            if (sum_value[filter] < best_value)
+            for (int filter = 1; filter < 5; filter++)
             {
-                best_value = sum_value[filter];
-                best_filter = filter;
+                if (sum_value[filter] < best_value)
+                {
+                    best_value = sum_value[filter];
+                    best_filter = filter;
+                }
             }
         }
+        else if ((forced_filter_type >= 0) && (forced_filter_type <= 4)) best_filter = forced_filter_type;
 
         // Register scanline filter byte
         data_filtered[(scanline_size + 1)*y] = best_filter;
