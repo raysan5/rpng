@@ -11,7 +11,8 @@
 
 ## features
 
- - Load/Save png files from raw image data
+ - Load/save png files from raw image data
+ - Load/save png indexed data and palette
  - Count/read/write/remove png chunks
  - Operates on file or memory-buffer
  - Chunks data abstraction (`png_chunk` type)
