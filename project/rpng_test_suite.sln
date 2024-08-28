@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.1082
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.35122.118
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rpng_test_suite", "rpng_test_suite\rpng_test_suite.vcxproj", "{2943C76C-AEE9-4D76-8E46-92CC88ACAB57}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rpng_raylib_test", "rpng_raylib_test\rpng_raylib_test.vcxproj", "{0BA7034C-A6B8-4BE5-BDBF-EF269A395DE0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,14 @@ Global
 		{2943C76C-AEE9-4D76-8E46-92CC88ACAB57}.Release|x64.Build.0 = Release|x64
 		{2943C76C-AEE9-4D76-8E46-92CC88ACAB57}.Release|x86.ActiveCfg = Release|Win32
 		{2943C76C-AEE9-4D76-8E46-92CC88ACAB57}.Release|x86.Build.0 = Release|Win32
+		{0BA7034C-A6B8-4BE5-BDBF-EF269A395DE0}.Debug|x64.ActiveCfg = Debug|x64
+		{0BA7034C-A6B8-4BE5-BDBF-EF269A395DE0}.Debug|x64.Build.0 = Debug|x64
+		{0BA7034C-A6B8-4BE5-BDBF-EF269A395DE0}.Debug|x86.ActiveCfg = Debug|Win32
+		{0BA7034C-A6B8-4BE5-BDBF-EF269A395DE0}.Debug|x86.Build.0 = Debug|Win32
+		{0BA7034C-A6B8-4BE5-BDBF-EF269A395DE0}.Release|x64.ActiveCfg = Release|x64
+		{0BA7034C-A6B8-4BE5-BDBF-EF269A395DE0}.Release|x64.Build.0 = Release|x64
+		{0BA7034C-A6B8-4BE5-BDBF-EF269A395DE0}.Release|x86.ActiveCfg = Release|Win32
+		{0BA7034C-A6B8-4BE5-BDBF-EF269A395DE0}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
