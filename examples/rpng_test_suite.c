@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
         rpng_chunk_combine_image_data(argv[1]);
         rpng_chunk_print_info(argv[1]);
     }
-    else printf("WARNING: No input file provided as argument\n");
+    else printf("WARNING: No input file provided as an argument\n");
 
 #if 0
     // TEST: Create a colorful image: 128x128, RGB
