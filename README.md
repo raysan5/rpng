@@ -19,9 +19,11 @@
  
 ## basic functions
 ```c
-// Load/Save a PNG file from image data (IHDR, IDAT, IEND)
+// Load/Save a PNG file from image data (IHDR, IDAT, PLTE, tRNS IEND)
 char *rpng_load_image(const char *filename, int *width, int *height, int *color_channels, int *bit_depth);
-void rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
+char *rpng_load_image_indexed(const char *filename, int *width, int *height, rpng_palette *palette);
+int rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
+int rpng_save_image_indexed(const char *filename, const char *indexed_data, int width, int height, rpng_palette palette);
 
 // Read and write chunks from file
 int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
@@ -50,7 +52,7 @@ rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_typ
 *Note an important detail:* memory functions do not receive the size of the buffer. It was a design decision.
 Data is validated following PNG specs (png magic number, chunks data, IEND closing chunk) but it's expected that user provides valid data.
 
-Memory functions that require writing data, return the output buffer size as a parameter: `int *output_size` and are limited in size by `RPNG_MAX_OUTPUT_SIZE` definition, by default **32MB**, redefine that number if dealing with bigger PNG images.
+Memory functions that require writing data, return the output buffer size as a parameter: `int *output_size` and are limited in size by `RPNG_MAX_OUTPUT_SIZE` definition, by default **64MB**, redefine that number if dealing with bigger PNG images.
 
 ## usage example
 
