@@ -1515,6 +1515,9 @@ char *rpng_save_image_indexed_to_memory(const char *indexed_data, int width, int
 }
 
 // Chunks managemeng ---->
+//-------------------------------------------------------------------------------------------------
+// PNG chunks managemeng functionality
+//-------------------------------------------------------------------------------------------------
 
 // Count the chunks in a PNG image from memory buffer
 int rpng_chunk_count_from_memory(const char *buffer)
