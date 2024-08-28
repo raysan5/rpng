@@ -44,7 +44,7 @@ int main(void)
     int width = 0;
     int height = 0;
     rpng_palette palette = { 0 };
-    char *image_data = rpng_load_image_indexed("resources/scarfy_indexed.png", &width, &height, &palette);  // WORKS
+    char *indexed_data = rpng_load_image_indexed("resources/scarfy_indexed.png", &width, &height, &palette);
 
     SetTargetFPS(60);
     //---------------------------------------------------------------------------------------
@@ -56,7 +56,7 @@ int main(void)
         //----------------------------------------------------------------------------------
         if (IsKeyPressed(KEY_ENTER))
         {
-            rpng_save_image_indexed("resources/indexed_output_test.png", image_data, width, height, palette);
+            rpng_save_image_indexed("resources/scarfy_indexed_output.png", indexed_data, width, height, palette);
         }
         //----------------------------------------------------------------------------------
 
@@ -65,25 +65,27 @@ int main(void)
         BeginDrawing();
 
             ClearBackground(RAYWHITE);
-
+            
             // Draw palette to verify it has been loaded successfully
             for (int i = 0; i < palette.color_count; i++)
             {
-                DrawRectangle(10 + 25*(i%24), 10 + 25*(i/24), 24, 24, (Color){ palette.colors[i].r, palette.colors[i].g, palette.colors[i].b, palette.colors[i].a });
-                DrawRectangleLines(10 + 25*(i%24), 10 + 25*(i/24), 24, 24, BLACK);
+                DrawRectangle(10 + 25*(i%24), screenHeight - 34 + 25*(i/24), 24, 24, (Color){ palette.colors[i].r, palette.colors[i].g, palette.colors[i].b, palette.colors[i].a });
+                DrawRectangleLines(10 + 25*(i%24), screenHeight - 34 + 25*(i/24), 24, 24, BLACK);
             }
             
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
-                    int index = (int)image_data[y*width + x];
+                    int index = (int)indexed_data[y*width + x];
                     if (index > palette.color_count) printf("WARNING: Index [%i]: %i\n", y*width + x, index);
-                    DrawPixel(x, y + 48, (Color){ palette.colors[index].r, palette.colors[index].g, palette.colors[index].b, palette.colors[index].a });
+                    DrawPixel(x, 200 + y, (Color){ palette.colors[index].r, palette.colors[index].g, palette.colors[index].b, palette.colors[index].a });
                 }
             }
 
             //DrawTexture(texture, screenWidth/2 - texture.width/2, screenHeight/2 - texture.height/2 - 40, WHITE);
+
+            DrawFPS(10, 10);
 
         EndDrawing();
         //----------------------------------------------------------------------------------
