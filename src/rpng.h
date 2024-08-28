@@ -180,6 +180,13 @@
     #define RPNG_MAX_OUTPUT_SIZE    (64*1024*1024)
 #endif
 
+// Define some possible error values
+// NOTE: Only some are actually used on file saving
+#define RPNG_SUCCESS                 0      // Image saved successfully
+#define RPNG_ERROR_FILE_OPEN         1      // The requested file can not be opened
+#define RPNG_ERROR_PIXEL_FORMAT      2      // Not a supported PNG image format
+#define RPNG_ERROR_MEMORY_ALLOC      3      // Memory could not be allocated for operation
+
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
@@ -198,10 +205,10 @@ typedef struct {
 // Color type
 // NOTE: Used for palette loading/saving
 typedef struct {
-    char r;                 // Color red value
-    char g;                 // Color green value
-    char b;                 // Color blue value
-    char a;                 // Color alpha value
+    unsigned char r;        // Color red value
+    unsigned char g;        // Color green value
+    unsigned char b;        // Color blue value
+    unsigned char a;        // Color alpha value
 } rpng_color;
 
 // Palette type
@@ -243,8 +250,8 @@ RPNGAPI char *rpng_load_image_indexed(const char *filename, int *width, int *hei
 RPNGAPI int rpng_save_image(const char *filename, const char *data, int width, int height, int color_channels, int bit_depth);
 
 // Save a PNG file from indexed image data (IHDR, PLTE, (tRNS), IDAT, IEND)
-//  - Palette colours must be provided as R8G8B8, they are saved in PLTE chunk
-//  - Palette alpha should be provided as R8, it is saved in tRNS chunk (if not NULL)
+//  - Palette colours are saved as RGB888 in PLTE chunk
+//  - Palette alpha is saved as R8 in tRNS chunk (if required)
 //  - Palette max number of entries is limited to [1..256] colors
 //  - Returns saving process result: 0-SUCCESS
 RPNGAPI int rpng_save_image_indexed(const char *filename, const char *data, int width, int height, rpng_palette palette);
@@ -459,7 +466,7 @@ const unsigned char png_signature[8] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1
 // Prefilter and compress image data (image_data -> IDAT chunk.data)
 static char *rpng_inflate_image_data(char *image_data, int image_data_size, int width, int height, int pixel_size);
 // Decompress and unfilter image data (IDAT chunk.data -> image_data)
-static char *rpng_deflate_image_data(char *image_data, int image_data_size, int width, int height, int pixel_size);
+static char *rpng_deflate_image_data(const char *image_data, int image_data_size, int width, int height, int pixel_size, int *output_size);
 
 // Swap integer from big<->little endian
 static unsigned int swap_endian(unsigned int value);
@@ -635,8 +642,8 @@ int rpng_save_image(const char *filename, const char *data, int width, int heigh
 }
 
 // Save a PNG file from indexed image data (IHDR, PLTE, (tRNS), IDAT, IEND)
-//  - Palette colours must be provided as RGB888, they are saved in PLTE chunk
-//  - Palette alpha should be provided as R8, it is saved in tRNS chunk (if not NULL)
+//  - Palette colours are saved as RGB888 in PLTE chunk
+//  - Palette alpha is saved as R8 in tRNS chunk (if required)
 //  - Palette max number of entries is limited to [1..256] colors
 int rpng_save_image_indexed(const char *filename, const char *data, int width, int height, rpng_palette palette)
 {
@@ -1262,11 +1269,11 @@ char *rpng_load_image_indexed_from_memory(const char *buffer, int *width, int *h
         palette->color_count = chunk_palette.length/3;
         palette->colors = (rpng_color *)RPNG_CALLOC(palette->color_count, sizeof(rpng_color));
 
-        for (int i = 0, k = 0; i < palette->color_count; i++, k += 3)
+        for (int i = 0; i < palette->color_count; i++)
         {
-            palette->colors[i].r = chunk_palette.data[k*3 + 0];
-            palette->colors[i].g = chunk_palette.data[k*3 + 1];
-            palette->colors[i].b = chunk_palette.data[k*3 + 2];
+            palette->colors[i].r = chunk_palette.data[i*3 + 0];
+            palette->colors[i].g = chunk_palette.data[i*3 + 1];
+            palette->colors[i].b = chunk_palette.data[i*3 + 2];
             palette->colors[i].a = 255;
         }
 
@@ -1277,17 +1284,16 @@ char *rpng_load_image_indexed_from_memory(const char *buffer, int *width, int *h
 
         if ((chunk_alpha.data != NULL) && (chunk_alpha.length == palette->color_count))
         {
-            for (int i = 0; i < palette->color_count; i++) palette->colors[i].a = chunk_alpha.data[i];
+            for (int i = 0; i < palette->color_count; i++) palette->colors[i].a = (unsigned char)chunk_alpha.data[i];
 
             RPNG_FREE(chunk_alpha.data);
         }
 
         // Load indexed image data
-        int count = 0;
-        rpng_chunk *chunks = rpng_chunk_read_all_from_memory(buffer, &count); // Read all chunks
+        rpng_chunk chunk_info = rpng_chunk_read_from_memory(buffer, "IHDR");
 
-        // First chunk is always IHDR, we can check image data info
-        rpng_chunk_IHDR *IHDRData = (rpng_chunk_IHDR *)chunks[0].data;
+        // WARNING: Cast chunk_info data directly to expected IHDR struct layout
+        rpng_chunk_IHDR *IHDRData = (rpng_chunk_IHDR *)chunk_info.data;
 
         *width = swap_endian(IHDRData->width);      // Image width
         *height = swap_endian(IHDRData->height);    // Image height
@@ -1320,10 +1326,8 @@ char *rpng_load_image_indexed_from_memory(const char *buffer, int *width, int *h
 
             RPNG_FREE(chunk_image.data);
         }
-        
-        // Free chunks memory
-        for (int i = 0; i < count; i++) RPNG_FREE(chunks[i].data);
-        RPNG_FREE(chunks);
+
+        RPNG_FREE(chunk_info.data);
     }
 
     return data;
@@ -1361,7 +1365,7 @@ char *rpng_save_image_to_memory(const char *data, int width, int height, int col
     char *comp_data = rpng_deflate_image_data(data, width*height*pixel_size, width, height, pixel_size, &comp_data_size);
 
     // Security check to verify compression worked
-    if (comp_data_size > 0)
+    if ((comp_data != NULL) && (comp_data_size > 0))
     {
         output_buffer = (char *)RPNG_CALLOC(8 + 13 + 12 + (comp_data_size + 12) + 12, 1); // Signature + IHDR + IDAT + IEND
 
@@ -1420,13 +1424,13 @@ char *rpng_save_image_indexed_to_memory(const char *data, int width, int height,
     char *comp_data = rpng_deflate_image_data(data, width*height*pixel_size, width, height, pixel_size, &comp_data_size);
 
     // Security check to verify compression worked
-    if (comp_data_size > 0)
+    if ((comp_data != NULL) && (comp_data_size > 0))
     {
         // Verify if tRNS chunk with palette alpha values is required (if there is any alpha != 255)
-        bool trns_required = true;
+        bool trns_required = false;
         for (int i = 0; i < palette.color_count; i++)
         {
-            if (palette.colors[i].a != 255) { trns_required = false; break; }
+            if (palette.colors[i].a != 255) { trns_required = true; break; }
         }
 
         // Allocate output buffer at required size
@@ -1443,7 +1447,7 @@ char *rpng_save_image_indexed_to_memory(const char *data, int width, int height,
         length_IHDR = swap_endian(length_IHDR);
         memcpy(output_buffer + 8, &length_IHDR, 4);
         memcpy(output_buffer + 8 + 4, "IHDR", 4);
-        memcpy(output_buffer + 8 + 4 + 4, &image_info, 13);
+        memcpy(output_buffer + 8 + 8, &image_info, 13);
         unsigned int crc = compute_crc32((unsigned char *)output_buffer + 8 + 4, 4 + 13);
         crc = swap_endian(crc);
         memcpy(output_buffer + 8 + 8 + 13, &crc, 4);
@@ -1452,37 +1456,37 @@ char *rpng_save_image_indexed_to_memory(const char *data, int width, int height,
         // Write PNG chunk PLTE (palette)
         unsigned int length_PLTE = palette.color_count*3;
         length_PLTE = swap_endian(length_PLTE);
-        memcpy(output_buffer + 8, &length_PLTE, 4);
-        memcpy(output_buffer + 8 + 4, "PLTE", 4);
-        char *plte_data = (char *)RPNG_CALLOC(palette.color_count*3, sizeof(char));
-        for (int i = 0, k = 0; i < palette.color_count; i++, k += 3)
+        memcpy(output_buffer + output_buffer_size, &length_PLTE, 4);
+        memcpy(output_buffer + output_buffer_size + 4, "PLTE", 4);
+        unsigned char *plte_data = (char *)RPNG_CALLOC(palette.color_count*3, sizeof(char));
+        for (int i = 0; i < palette.color_count; i++)
         {
-            plte_data[k*3 + 0] = palette.colors[i].r;
-            plte_data[k*3 + 1] = palette.colors[i].g;
-            plte_data[k*3 + 2] = palette.colors[i].b;
+            plte_data[i*3 + 0] = palette.colors[i].r;
+            plte_data[i*3 + 1] = palette.colors[i].g;
+            plte_data[i*3 + 2] = palette.colors[i].b;
         }
-        memcpy(output_buffer + 8 + 4 + 4, plte_data, palette.color_count*3);
+        memcpy(output_buffer + output_buffer_size + 8, plte_data, palette.color_count*3);
         RPNG_FREE(plte_data);
-        crc = compute_crc32((unsigned char *)output_buffer + 8 + 4, 4 + palette.color_count*3);
+        crc = compute_crc32((unsigned char *)output_buffer + output_buffer_size + 4, 4 + palette.color_count*3);
         crc = swap_endian(crc);
-        memcpy(output_buffer + 8 + 8 + palette.color_count*3, &crc, 4);
-        output_buffer_size += (8 + 12 + palette.color_count*3);
+        memcpy(output_buffer + output_buffer_size + 8 + palette.color_count*3, &crc, 4);
+        output_buffer_size += (palette.color_count*3 + 12);
 
         // Write PNG chunk tRNS (palette alpha values, if required)
         if (trns_required)
         {
             unsigned int length_tRNS = palette.color_count;
             length_tRNS = swap_endian(length_tRNS);
-            memcpy(output_buffer + 8, &length_tRNS, 4);
-            memcpy(output_buffer + 8 + 4, "tRNS", 4);
-            char *trns_data = (char *)RPNG_CALLOC(palette.color_count, sizeof(char));
+            memcpy(output_buffer + output_buffer_size, &length_tRNS, 4);
+            memcpy(output_buffer + output_buffer_size + 4, "tRNS", 4);
+            unsigned char *trns_data = (char *)RPNG_CALLOC(palette.color_count, sizeof(char));
             for (int i = 0; i < palette.color_count; i++) trns_data[i] = palette.colors[i].a;
-            memcpy(output_buffer + 8 + 4 + 4, trns_data, palette.color_count);
+            memcpy(output_buffer + output_buffer_size + 8, trns_data, palette.color_count);
             RPNG_FREE(trns_data);
-            crc = compute_crc32((unsigned char *)output_buffer + 8 + 4, 4 + palette.color_count);
+            crc = compute_crc32((unsigned char *)output_buffer + output_buffer_size + 4, 4 + palette.color_count);
             crc = swap_endian(crc);
-            memcpy(output_buffer + 8 + 8 + palette.color_count, &crc, 4);
-            output_buffer_size += (8 + 12 + palette.color_count);
+            memcpy(output_buffer + output_buffer_size + 8 + palette.color_count, &crc, 4);
+            output_buffer_size += (palette.color_count + 12);
         }
 
         // Write PNG chunk IDAT
@@ -1554,7 +1558,6 @@ rpng_chunk rpng_chunk_read_from_memory(const char *buffer, const char *chunk_typ
         {
             char *idat_data_concat = (char *)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, sizeof(char));
             int idat_data_concat_size = 0;
-            rpng_chunk chunk_idat = { 0 };
 
             while (memcmp(buffer_ptr + 4, "IEND", 4) != 0) // While IEND chunk not reached
             {
@@ -1962,7 +1965,7 @@ char *rpng_chunk_split_image_data_from_memory(char *buffer, int split_size, int 
 //----------------------------------------------------------------------------------
 
 // Prefilter and compress image data
-static char *rpng_deflate_image_data(char *image_data, int image_data_size, int width, int height, int pixel_size, int *output_size)
+static char *rpng_deflate_image_data(const char *image_data, int image_data_size, int width, int height, int pixel_size, int *output_size)
 {
     char *idat_data = NULL;
 
@@ -2052,7 +2055,7 @@ static char *rpng_deflate_image_data(char *image_data, int image_data_size, int 
     // Compress filtered image data and generate a valid zlib stream
     struct sdefl *sde = (struct sdefl*)RPNG_CALLOC(sizeof(struct sdefl), 1);
     int bounds = sdefl_bound(data_filtered_size);
-    unsigned char *comp_data = (unsigned char *)RPNG_CALLOC(bounds, 1);
+    char *comp_data = (char *)RPNG_CALLOC(bounds, 1);
     int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_filtered_size, 8);   // Compression level 8, same as stbiw
     RPNG_FREE(data_filtered);
     RPNG_FREE(sde);
@@ -2071,8 +2074,8 @@ static char *rpng_deflate_image_data(char *image_data, int image_data_size, int 
 // Decompress and unfilter image data (IDAT)
 static char *rpng_inflate_image_data(char *image_data, int image_data_size, int width, int height, int pixel_size)
 {
-    unsigned char *image_data_unfiltered = NULL;
-    unsigned char *image_data_filtered = RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1); // WARNING: Allocate enough memory to load full image decompressed
+    char *image_data_unfiltered = NULL;
+    char *image_data_filtered = (char *)RPNG_CALLOC(RPNG_MAX_OUTPUT_SIZE, 1); // WARNING: Allocate enough memory to load full image decompressed
 
     // Decompress IDAT chunk data
     int image_data_decomp_size = zsinflate(image_data_filtered, RPNG_MAX_OUTPUT_SIZE, image_data, image_data_size);
@@ -2088,7 +2091,7 @@ static char *rpng_inflate_image_data(char *image_data, int image_data_size, int 
         // Image data reverse pre-processing for filter type
         //int pixel_size = *color_channels*(*bit_depth/8);
         int scanline_size = width*pixel_size;
-        image_data_unfiltered = (unsigned char *)RPNG_CALLOC(image_data_decomp_size, 1);  // Actually data unfiltered size should be smaller
+        image_data_unfiltered = (char *)RPNG_CALLOC(image_data_decomp_size, 1);  // Actually data unfiltered size should be smaller
 
         int current_filter = 0;
         int out = 0, x = 0, a = 0, b = 0, c = 0;
@@ -2120,7 +2123,7 @@ static char *rpng_inflate_image_data(char *image_data, int image_data_size, int 
                 }
 
                 // Register scanline unfiltered values, byte by byte
-                image_data_unfiltered[y*scanline_size + p] = (unsigned char)out;
+                image_data_unfiltered[y*scanline_size + p] = (char)out;
             }
         }
 
@@ -2240,7 +2243,7 @@ static char *load_file_to_buffer(const char *filename, int *bytes_read)
 // Write data to file from buffer
 static int save_file_from_buffer(const char *filename, void *data, int bytesToWrite)
 {
-    int result = 0;
+    int result = RPNG_SUCCESS;
 #if !defined(RPNG_NO_STDIO)
     if ((filename != NULL) && (data != NULL) && (bytesToWrite > 0))
     {
@@ -2256,7 +2259,11 @@ static int save_file_from_buffer(const char *filename, void *data, int bytesToWr
 
             fclose(file);
         }
-        else RPNG_LOG("FILEIO: [%s] Failed to open file\n", filename);
+        else
+        {
+            result = RPNG_ERROR_FILE_OPEN;
+            RPNG_LOG("FILEIO: [%s] Failed to open file\n", filename);
+        }
     }
     else RPNG_LOG("FILEIO: File path or data provided are not valid\n");
 #else
