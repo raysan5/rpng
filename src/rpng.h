@@ -91,17 +91,20 @@
 *       Comment          Miscellaneous comment; conversion from GIF comment
 *
 *   VERSIONS HISTORY:
-*       1.5 (28-Aug-2024) ADDED: Support indexed data loading and saving (PLTE)
-*                         ADDED: rpng_load_image_indexed()
-*                         ADDED: rpng_save_image_indexed()
+*       1.5 (28-Aug-2024) ADDED: Support indexed data loading and saving (PLTE, tRNS)
+*                         ADDED: rpng_load_image_indexed() (+ memory version)
+*                         ADDED: rpng_save_image_indexed() (+ memory version)
 *                         REVIEWED: Crashes on images loading not found
+* 
 *       1.1 (29-May-2023) UPDATED: sdefl and sinfl, fixed issue
+* 
 *       1.0 (24-Dec-2021) ADDED: rpng_load_image()
 *                         ADDED: RPNG_LOG() macro
 *                         REVIEWED: rpng_save_image() filter process issues
 *                         RENAMED: rpng_create_image() to rpng_save_image()
 *                         UPDATED: sdefl to latest version 1.0
 *                         ADDED: sinfl library (internal copy) for data decompression
+* 
 *       0.9 (10-Jun-2020) First completely functional version of the library
 *
 *
