@@ -1,6 +1,6 @@
 <img align="left" src="https://github.com/raysan5/rpng/blob/master/logo/rpng_256x256.png" width=256>
 
-**rpng is a simple and easy-to-use library to manage png chunks.**
+**rpng is a simple and easy-to-use library to load/save png images and manage png chunks.**
 
 `rpng` is provided as a self-contained portable single-file header-only library with no external dependencies. Its only dependency, the standard C library, can also be replaced with a custom implementation if required.
 
