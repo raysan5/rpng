@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
 }
 ```
 
-There is a complete example [here](https://github.com/raysan5/rpng/blob/master/example/rpng_test_suite.c).
+There is a complete example [here](https://github.com/raysan5/rpng/blob/master/examples/rpng_test_suite.c).
 
 ## license
 
