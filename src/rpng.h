@@ -14,7 +14,6 @@
 *       - Bit depths of 1/2/4 bits per pixel not supported, only 8/16 bits
 *
 *   POSSIBLE IMPROVEMENTS:
-*       - Support error return codes, not only errors logging
 *       - Support APNG chunks, added to PNG specs recently (draft)
 *
 *   CONFIGURATION:
@@ -186,6 +185,12 @@
     #define RPNG_MAX_OUTPUT_SIZE    (64*1024*1024)
 #endif
 
+#ifndef RPNG_COMPRESSION_LEVEL
+    // Deflate compression level
+    // NOTE: Default to same as stbiw: 8
+    #define RPNG_COMPRESSION_LEVEL   8
+#endif
+
 // Define some possible error values
 // NOTE: Only some are actually used on file saving
 #define RPNG_SUCCESS                 0      // Image saved successfully
@@ -268,6 +273,9 @@ RPNGAPI char *rpng_load_image_from_memory(const char *buffer, int *width, int *h
 RPNGAPI char *rpng_load_image_indexed_from_memory(const char *buffer, int *width, int *height, rpng_palette *palette); // Load indexed png data from memory buffer (8 bpp)
 RPNGAPI char *rpng_save_image_to_memory(const char *data, int width, int height, int color_channels, int bit_depth, int *output_size); // Save png data to memory buffer
 RPNGAPI char *rpng_save_image_indexed_to_memory(const char *indexed_data, int width, int height, rpng_palette palette, int *output_size); // Save indexed data to memory buffer
+
+// Convert indexed image data to RGBA data
+RPNGAPI char *rpng_unindex_image_data(char *indexed_data, int width, int height, rpng_palette palette);
 
 // Read and write chunks from file
 RPNGAPI int rpng_chunk_count(const char *filename);                                  // Count the chunks in a PNG image
@@ -850,7 +858,7 @@ void rpng_chunk_write_comp_text(const char *filename, char *keyword, char *text)
         struct sdefl *sde = (struct sdefl *)RPNG_CALLOC(sizeof(struct sdefl), 1);
         int bounds = sdefl_bound(text_len);
         unsigned char *comp_text = (unsigned char *)RPNG_CALLOC(bounds, 1);
-        int comp_text_size = zsdeflate(sde, comp_text, (unsigned char *)text, text_len, 8);   // Compression level 8, same as stbiw
+        int comp_text_size = zsdeflate(sde, comp_text, (unsigned char *)text, text_len, RPNG_COMPRESSION_LEVEL);
         RPNG_FREE(sde);
 
         // Fill chunk with required data
@@ -1464,7 +1472,7 @@ char *rpng_save_image_indexed_to_memory(const char *indexed_data, int width, int
         length_PLTE = swap_endian(length_PLTE);
         memcpy(output_buffer + output_buffer_size, &length_PLTE, 4);
         memcpy(output_buffer + output_buffer_size + 4, "PLTE", 4);
-        unsigned char *plte_data = (char *)RPNG_CALLOC(palette.color_count*3, sizeof(char));
+        char *plte_data = (char *)RPNG_CALLOC(palette.color_count*3, sizeof(char));
         for (int i = 0; i < palette.color_count; i++)
         {
             plte_data[i*3 + 0] = palette.colors[i].r;
@@ -1485,7 +1493,7 @@ char *rpng_save_image_indexed_to_memory(const char *indexed_data, int width, int
             length_tRNS = swap_endian(length_tRNS);
             memcpy(output_buffer + output_buffer_size, &length_tRNS, 4);
             memcpy(output_buffer + output_buffer_size + 4, "tRNS", 4);
-            unsigned char *trns_data = (char *)RPNG_CALLOC(palette.color_count, sizeof(char));
+            char *trns_data = (char *)RPNG_CALLOC(palette.color_count, sizeof(char));
             for (int i = 0; i < palette.color_count; i++) trns_data[i] = palette.colors[i].a;
             memcpy(output_buffer + output_buffer_size + 8, trns_data, palette.color_count);
             RPNG_FREE(trns_data);
@@ -1518,7 +1526,30 @@ char *rpng_save_image_indexed_to_memory(const char *indexed_data, int width, int
     return output_buffer;
 }
 
-// Chunks managemeng ---->
+
+// Convert indexed image data to RGBA data
+char *rpng_unindex_image_data(char *indexed_data, int width, int height, rpng_palette palette)
+{
+    char *data = NULL;
+
+    if ((indexed_data != NULL) && (palette.color_count > 0) && (palette.colors != NULL))
+    {
+        data = (char *)RPNG_CALLOC(width*height*4, sizeof(char));
+
+        for (int i = 0; i < width*height; i++)
+        {
+            data[i*4 + 0] = palette.colors[(int)indexed_data[i]].r;
+            data[i*4 + 1] = palette.colors[(int)indexed_data[i]].g;
+            data[i*4 + 2] = palette.colors[(int)indexed_data[i]].b;
+            data[i*4 + 3] = palette.colors[(int)indexed_data[i]].a;
+        }
+
+    }
+    else RPNG_LOG("Provided indexed data or palette not valid, data can not be un-indexed\n");
+
+    return data;
+}
+
 //-------------------------------------------------------------------------------------------------
 // PNG chunks managemeng functionality
 //-------------------------------------------------------------------------------------------------
@@ -2069,7 +2100,7 @@ static char *rpng_deflate_image_data(const char *image_data, int image_data_size
     struct sdefl *sde = (struct sdefl*)RPNG_CALLOC(sizeof(struct sdefl), 1);
     int bounds = sdefl_bound(data_filtered_size);
     char *comp_data = (char *)RPNG_CALLOC(bounds, 1);
-    int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_filtered_size, 8);   // Compression level 8, same as stbiw
+    int comp_data_size = zsdeflate(sde, comp_data, data_filtered, data_filtered_size, RPNG_COMPRESSION_LEVEL);
     RPNG_FREE(data_filtered);
     RPNG_FREE(sde);
 
