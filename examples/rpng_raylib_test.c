@@ -82,6 +82,15 @@ int main(void)
                     DrawPixel(x, 200 + y, (Color){ palette.colors[index].r, palette.colors[index].g, palette.colors[index].b, palette.colors[index].a });
                 }
             }
+            
+            for (int y = 0; y < image.height; y++)
+            {
+                for (int x = 0; x < image.width; x++)
+                {
+                    int index = (int)quan_data[y*image.width + x];
+                    DrawPixel(10 + x, 40 + y, (Color){ palette.colors[index].r, palette.colors[index].g, palette.colors[index].b, palette.colors[index].a });
+                }
+            }
 
             //DrawTexture(texture, screenWidth/2 - texture.width/2, screenHeight/2 - texture.height/2 - 40, WHITE);
 
