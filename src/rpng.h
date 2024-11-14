@@ -1526,7 +1526,6 @@ char *rpng_save_image_indexed_to_memory(const char *indexed_data, int width, int
     return output_buffer;
 }
 
-
 // Convert indexed image data to RGBA data
 char *rpng_unindex_image_data(char *indexed_data, int width, int height, rpng_palette palette)
 {
