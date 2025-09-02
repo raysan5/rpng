@@ -78,7 +78,7 @@ const unsigned int imageWH[MAX_COMBINE_SIZES] = {
     5345, 5999, 7000, 7689, 8000, 8192 };
 
 //----------------------------------------------------------------------------------
-// Module functions declaration
+// Module Functions Declaration
 //----------------------------------------------------------------------------------
 static Color GetRandomColor(void);
 static Image GenImageRandom(int width, int height, float randColFactor);
@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
 }
 
 //----------------------------------------------------------------------------------
-// Module functions definition
+// Module Functions Definition
 //----------------------------------------------------------------------------------
 static Color GetRandomColor(void)
 {
