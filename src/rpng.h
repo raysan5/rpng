@@ -15,6 +15,7 @@
 *
 *   POSSIBLE IMPROVEMENTS:
 *       - Support APNG chunks, added to PNG specs recently (draft)
+*       - Support XMP chunks for extended metadata, useful for C2PA metadata
 *
 *   CONFIGURATION:
 *       #define RPNG_IMPLEMENTATION
@@ -95,16 +96,16 @@
 *                         ADDED: rpng_save_image_indexed() (+ memory version)
 *                         ADDED: Automatic join of IDAT chunks when requested
 *                         REVIEWED: Crashes on images loading not found
-* 
+*
 *       1.1 (29-May-2023) UPDATED: sdefl and sinfl, fixed issue
-* 
+*
 *       1.0 (24-Dec-2021) ADDED: rpng_load_image()
 *                         ADDED: RPNG_LOG() macro
 *                         REVIEWED: rpng_save_image() filter process issues
 *                         RENAMED: rpng_create_image() to rpng_save_image()
 *                         UPDATED: sdefl to latest version 1.0
 *                         ADDED: sinfl library (internal copy) for data decompression
-* 
+*
 *       0.9 (10-Jun-2020) First completely functional version of the library
 *
 *
@@ -798,7 +799,7 @@ void rpng_chunk_write(const char *filename, rpng_chunk chunk)
 
     int file_output_size = 0;
     char *file_output = NULL;
-    
+
     if (file_data != NULL)
     {
         file_output = rpng_chunk_write_from_memory(file_data, chunk, &file_output_size);
@@ -1319,7 +1320,7 @@ char *rpng_load_image_indexed_from_memory(const char *buffer, int *width, int *h
 
         RPNG_FREE(chunk_palette.data);
 
-        // Try loading palette alpha data, if provided 
+        // Try loading palette alpha data, if provided
         rpng_chunk chunk_alpha = rpng_chunk_read_from_memory(buffer, "tRNS");
 
         if ((chunk_alpha.data != NULL) && (chunk_alpha.length == palette->color_count))
